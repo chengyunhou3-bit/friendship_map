@@ -1,0 +1,10 @@
+# 私人評分資料：不可提交或上傳到程式碼倉庫
+results.json
+results_*.json
+.streamlit/secrets.toml
+
+# 本機與 Python 暫存檔
+.DS_Store
+__pycache__/
+*.pyc
+.venv/

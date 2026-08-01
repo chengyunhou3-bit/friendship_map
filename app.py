@@ -144,6 +144,7 @@ def initialize_state():
         "names": [],
         "pairs": [],
         "question_index": 0,
+        "answer_history": [],
         "comparison_mode": "initial",
         "new_names": [],
         "editor_version": 0,
@@ -223,6 +224,7 @@ def start_comparison(names):
     }
     st.session_state.pairs = make_pairs(names)
     st.session_state.question_index = 0
+    st.session_state.answer_history = []
     st.session_state.comparison_mode = "initial"
     st.session_state.new_names = []
     st.session_state.stage = "familiarity"
@@ -239,6 +241,7 @@ def start_incremental_comparison(new_names):
 
     st.session_state.pairs = make_current_pairs()
     st.session_state.question_index = 0
+    st.session_state.answer_history = []
     st.session_state.stage = "familiarity"
 
 
@@ -259,6 +262,19 @@ def record_answer(result, expected_stage, expected_question_index):
         return
 
     person_a, person_b = pairs[question_index]
+
+    st.session_state.answer_history.append(
+        {
+            "stage": stage,
+            "question_index": question_index,
+            "pairs": list(pairs),
+            "person_a": person_a,
+            "person_b": person_b,
+            "result": result,
+            "comparison_mode": st.session_state.comparison_mode,
+            "new_names": list(st.session_state.new_names)
+        }
+    )
 
     if stage == "familiarity":
         scores = st.session_state.familiarity_scores
@@ -305,6 +321,35 @@ def record_answer(result, expected_stage, expected_question_index):
     st.session_state.stage = "results"
 
 
+def undo_last_answer():
+    if not st.session_state.answer_history:
+        return
+
+    answer = st.session_state.answer_history.pop()
+    stage = answer["stage"]
+    person_a = answer["person_a"]
+    person_b = answer["person_b"]
+    result = answer["result"]
+
+    if stage == "familiarity":
+        scores = st.session_state.familiarity_scores
+    else:
+        scores = st.session_state.likability_scores
+
+    if result == ">":
+        scores[person_a] -= 1
+        scores[person_b] += 1
+    elif result == "<":
+        scores[person_a] += 1
+        scores[person_b] -= 1
+
+    st.session_state.stage = stage
+    st.session_state.question_index = answer["question_index"]
+    st.session_state.pairs = answer["pairs"]
+    st.session_state.comparison_mode = answer["comparison_mode"]
+    st.session_state.new_names = answer["new_names"]
+
+
 def load_saved_into_state(saved_results):
     st.session_state.names = saved_results["names"]
     st.session_state.familiarity_scores = saved_results[
@@ -319,6 +364,7 @@ def load_saved_into_state(saved_results):
     st.session_state.new_names = []
     st.session_state.pairs = []
     st.session_state.question_index = 0
+    st.session_state.answer_history = []
     st.session_state.editor_version += 1
     st.session_state.stage = "results"
 
@@ -393,6 +439,7 @@ def apply_result_edits(ranking, edited_data):
         st.session_state.y_coordinates
     )
 
+    st.session_state.answer_history = []
     st.session_state.editor_version += 1
     return True, "名字與座標已更新並保存。"
 
@@ -573,6 +620,13 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 
     st.subheader(title)
 
+    st.button(
+        "← 回上一題",
+        key="undo_comparison_answer",
+        disabled=not st.session_state.answer_history,
+        on_click=undo_last_answer
+    )
+
     if is_incremental:
         st.info(
             "只會比較包含新人物的組合，舊人物彼此不用重選。"
@@ -628,6 +682,13 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 
 elif st.session_state.stage == "results":
     st.subheader("4. 最終結果")
+
+    if st.session_state.answer_history:
+        st.button(
+            "← 回上一題",
+            key="undo_result_answer",
+            on_click=undo_last_answer
+        )
 
     drag_message = st.session_state.pop("drag_message", None)
     edit_message = st.session_state.pop("edit_message", None)

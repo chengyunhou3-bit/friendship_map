@@ -8,6 +8,24 @@ PIN_MAX_LENGTH = 8
 PIN_ITERATIONS = 210_000
 
 
+def disabled_pin_protection():
+    return {"enabled": False}
+
+
+def pin_protection_is_disabled(protection):
+    return (
+        isinstance(protection, dict)
+        and protection.get("enabled") is False
+    )
+
+
+def pin_protection_is_enabled(protection):
+    return (
+        isinstance(protection, dict)
+        and protection.get("algorithm") == "pbkdf2_sha256"
+    )
+
+
 def validate_pin(pin):
     pin = str(pin)
 
@@ -47,7 +65,7 @@ def verify_pin(pin, protection):
         return False
 
     try:
-        if protection.get("algorithm") != "pbkdf2_sha256":
+        if not pin_protection_is_enabled(protection):
             return False
 
         iterations = int(protection["iterations"])

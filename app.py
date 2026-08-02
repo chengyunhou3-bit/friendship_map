@@ -25,7 +25,14 @@ from cloud_store import (
     save_cloud_results
 )
 from draggable_map import draggable_relationship_map
-from record_pin import create_pin_protection, validate_pin, verify_pin
+from record_pin import (
+    create_pin_protection,
+    disabled_pin_protection,
+    pin_protection_is_disabled,
+    pin_protection_is_enabled,
+    validate_pin,
+    verify_pin
+)
 
 
 st.set_page_config(
@@ -757,40 +764,50 @@ with st.sidebar:
     if saved_results is not None:
         if not st.session_state.pin_prompt_open:
             if st.button("載入上次結果", width="stretch"):
-                st.session_state.pin_prompt_open = True
+                if pin_protection_is_disabled(
+                    saved_results.get("pin_protection")
+                ):
+                    load_saved_into_state(saved_results)
+                else:
+                    st.session_state.pin_prompt_open = True
                 st.rerun()
         else:
             pin_protection = saved_results.get("pin_protection")
 
-            if pin_protection is None:
-                st.info("第一次使用 PIN，請先建立 4～8 位數字。")
+            if not pin_protection_is_enabled(pin_protection):
+                st.info("是否要替這份紀錄加上 PIN 保護？")
 
-                with st.form("create_record_pin_form"):
-                    new_pin = st.text_input(
-                        "建立 PIN",
-                        type="password",
-                        max_chars=8
+                with st.form("choose_record_pin_form"):
+                    pin_choice = st.radio(
+                        "載入方式",
+                        ["使用 PIN", "不使用 PIN"],
+                        horizontal=True
                     )
-                    confirm_pin = st.text_input(
-                        "再次輸入 PIN",
-                        type="password",
-                        max_chars=8
-                    )
-                    create_and_load = st.form_submit_button(
-                        "設定 PIN 並載入",
+
+                    if pin_choice == "使用 PIN":
+                        new_pin = st.text_input(
+                            "建立 PIN",
+                            type="password",
+                            max_chars=8
+                        )
+                        confirm_pin = st.text_input(
+                            "再次輸入 PIN",
+                            type="password",
+                            max_chars=8
+                        )
+                    else:
+                        new_pin = ""
+                        confirm_pin = ""
+
+                    confirm_pin_choice = st.form_submit_button(
+                        "確認並載入",
                         type="primary",
                         width="stretch"
                     )
 
-                if create_and_load:
-                    valid, pin_error = validate_pin(new_pin)
-
-                    if not valid:
-                        st.error(pin_error)
-                    elif new_pin != confirm_pin:
-                        st.error("兩次輸入的 PIN 不一致。")
-                    else:
-                        pin_protection = create_pin_protection(new_pin)
+                if confirm_pin_choice:
+                    if pin_choice == "不使用 PIN":
+                        pin_protection = disabled_pin_protection()
                         save_pin_protection(
                             saved_results,
                             pin_protection
@@ -798,6 +815,22 @@ with st.sidebar:
                         load_saved_into_state(saved_results)
                         st.session_state.pin_prompt_open = False
                         st.rerun()
+                    else:
+                        valid, pin_error = validate_pin(new_pin)
+
+                        if not valid:
+                            st.error(pin_error)
+                        elif new_pin != confirm_pin:
+                            st.error("兩次輸入的 PIN 不一致。")
+                        else:
+                            pin_protection = create_pin_protection(new_pin)
+                            save_pin_protection(
+                                saved_results,
+                                pin_protection
+                            )
+                            load_saved_into_state(saved_results)
+                            st.session_state.pin_prompt_open = False
+                            st.rerun()
             else:
                 with st.form("unlock_saved_results_form"):
                     entered_pin = st.text_input(
@@ -830,6 +863,65 @@ with st.sidebar:
     if st.button("重新開始", width="stretch"):
         reset_app()
         st.rerun()
+
+    if (
+        saved_results is not None
+        and not guest_mode_enabled()
+        and st.session_state.stage == "results"
+    ):
+        with st.expander("紀錄 PIN 設定"):
+            current_pin_protection = saved_results.get("pin_protection")
+
+            if pin_protection_is_enabled(current_pin_protection):
+                st.caption("目前已啟用 PIN 保護。")
+                confirm_disable_pin = st.checkbox(
+                    "我確定要關閉 PIN 保護"
+                )
+
+                if st.button(
+                    "關閉 PIN 保護",
+                    key="disable_record_pin",
+                    disabled=not confirm_disable_pin,
+                    width="stretch"
+                ):
+                    save_pin_protection(
+                        saved_results,
+                        disabled_pin_protection()
+                    )
+                    st.rerun()
+            else:
+                st.caption("目前載入紀錄時不需要 PIN。")
+
+                with st.form("enable_record_pin_form"):
+                    settings_pin = st.text_input(
+                        "建立新 PIN",
+                        type="password",
+                        max_chars=8
+                    )
+                    settings_pin_confirm = st.text_input(
+                        "再次輸入新 PIN",
+                        type="password",
+                        max_chars=8
+                    )
+                    enable_pin = st.form_submit_button(
+                        "啟用 PIN 保護",
+                        type="primary",
+                        width="stretch"
+                    )
+
+                if enable_pin:
+                    valid, pin_error = validate_pin(settings_pin)
+
+                    if not valid:
+                        st.error(pin_error)
+                    elif settings_pin != settings_pin_confirm:
+                        st.error("兩次輸入的 PIN 不一致。")
+                    else:
+                        save_pin_protection(
+                            saved_results,
+                            create_pin_protection(settings_pin)
+                        )
+                        st.rerun()
 
     if guest_mode_enabled():
         st.divider()

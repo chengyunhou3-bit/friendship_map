@@ -637,14 +637,14 @@ with settings_column:
                 value=current_settings["familiarity_question"],
                 max_chars=80
             )
-            custom_likability_question = st.text_input(
-                "第二組選擇題",
-                value=current_settings["likability_question"],
-                max_chars=80
-            )
             custom_x_axis_title = st.text_input(
                 "X 軸標題",
                 value=current_settings["x_axis_title"],
+                max_chars=80
+            )
+            custom_likability_question = st.text_input(
+                "第二組選擇題",
+                value=current_settings["likability_question"],
                 max_chars=80
             )
             custom_y_axis_title = st.text_input(

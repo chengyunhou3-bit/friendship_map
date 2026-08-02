@@ -25,6 +25,7 @@ from cloud_store import (
     save_cloud_results
 )
 from draggable_map import draggable_relationship_map
+from record_pin import create_pin_protection, validate_pin, verify_pin
 
 
 st.set_page_config(
@@ -102,9 +103,10 @@ def build_result_data(
     likability_scores,
     x_coordinates,
     y_coordinates,
-    display_settings
+    display_settings,
+    pin_protection=None
 ):
-    return {
+    result = {
         "saved_at": datetime.now().isoformat(timespec="seconds"),
         "names": names,
         "familiarity_scores": familiarity_scores,
@@ -113,6 +115,11 @@ def build_result_data(
         "y_coordinates": y_coordinates,
         "display_settings": normalized_display_settings(display_settings)
     }
+
+    if pin_protection is not None:
+        result["pin_protection"] = pin_protection
+
+    return result
 
 
 def save_current_results(
@@ -132,7 +139,8 @@ def save_current_results(
             likability_scores,
             x_coordinates,
             y_coordinates,
-            display_settings=st.session_state.display_settings
+            display_settings=st.session_state.display_settings,
+            pin_protection=st.session_state.pin_protection
         )
         return
 
@@ -147,9 +155,36 @@ def save_current_results(
             likability_scores,
             x_coordinates,
             y_coordinates,
-            st.session_state.display_settings
+            st.session_state.display_settings,
+            st.session_state.pin_protection
         )
     )
+
+
+def save_pin_protection(saved_results, pin_protection):
+    updated_results = dict(saved_results)
+    updated_results["pin_protection"] = pin_protection
+
+    if not cloud_mode_enabled():
+        save_local_results(
+            updated_results["names"],
+            updated_results["familiarity_scores"],
+            updated_results["likability_scores"],
+            updated_results["x_coordinates"],
+            updated_results["y_coordinates"],
+            display_settings=updated_results.get("display_settings"),
+            pin_protection=pin_protection
+        )
+    else:
+        url, service_key = cloud_credentials()
+        save_cloud_results(
+            url,
+            service_key,
+            current_owner_id(),
+            updated_results
+        )
+
+    st.session_state.pin_protection = pin_protection
 
 
 def load_current_results():
@@ -192,6 +227,8 @@ def initialize_state():
         "guest_mode": False,
         "display_settings": normalized_display_settings(),
         "display_settings_loaded": False,
+        "pin_protection": None,
+        "pin_prompt_open": False,
         "comparison_mode": "initial",
         "new_names": [],
         "editor_version": 0,
@@ -606,6 +643,9 @@ except Exception as error:
     st.exception(error)
     st.stop()
 
+if saved_results is not None and st.session_state.pin_protection is None:
+    st.session_state.pin_protection = saved_results.get("pin_protection")
+
 if not st.session_state.display_settings_loaded:
     if saved_results is not None:
         st.session_state.display_settings = normalized_display_settings(
@@ -715,9 +755,77 @@ with st.sidebar:
             st.caption(f"已登入：{display_name}")
 
     if saved_results is not None:
-        if st.button("載入上次結果", width="stretch"):
-            load_saved_into_state(saved_results)
-            st.rerun()
+        if not st.session_state.pin_prompt_open:
+            if st.button("載入上次結果", width="stretch"):
+                st.session_state.pin_prompt_open = True
+                st.rerun()
+        else:
+            pin_protection = saved_results.get("pin_protection")
+
+            if pin_protection is None:
+                st.info("第一次使用 PIN，請先建立 4～8 位數字。")
+
+                with st.form("create_record_pin_form"):
+                    new_pin = st.text_input(
+                        "建立 PIN",
+                        type="password",
+                        max_chars=8
+                    )
+                    confirm_pin = st.text_input(
+                        "再次輸入 PIN",
+                        type="password",
+                        max_chars=8
+                    )
+                    create_and_load = st.form_submit_button(
+                        "設定 PIN 並載入",
+                        type="primary",
+                        width="stretch"
+                    )
+
+                if create_and_load:
+                    valid, pin_error = validate_pin(new_pin)
+
+                    if not valid:
+                        st.error(pin_error)
+                    elif new_pin != confirm_pin:
+                        st.error("兩次輸入的 PIN 不一致。")
+                    else:
+                        pin_protection = create_pin_protection(new_pin)
+                        save_pin_protection(
+                            saved_results,
+                            pin_protection
+                        )
+                        load_saved_into_state(saved_results)
+                        st.session_state.pin_prompt_open = False
+                        st.rerun()
+            else:
+                with st.form("unlock_saved_results_form"):
+                    entered_pin = st.text_input(
+                        "輸入紀錄 PIN",
+                        type="password",
+                        max_chars=8
+                    )
+                    unlock_results = st.form_submit_button(
+                        "解鎖並載入",
+                        type="primary",
+                        width="stretch"
+                    )
+
+                if unlock_results:
+                    if verify_pin(entered_pin, pin_protection):
+                        load_saved_into_state(saved_results)
+                        st.session_state.pin_prompt_open = False
+                        st.rerun()
+                    else:
+                        st.error("PIN 錯誤，請再試一次。")
+
+            if st.button(
+                "取消",
+                key="cancel_pin_prompt",
+                width="stretch"
+            ):
+                st.session_state.pin_prompt_open = False
+                st.rerun()
 
     if st.button("重新開始", width="stretch"):
         reset_app()

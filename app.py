@@ -1501,7 +1501,7 @@ elif st.session_state.stage == "results":
 
     st.markdown("### 🖐️ 拖曳調整座標")
     st.caption(
-        "拖動圓點即可微調 X/Y 座標，停止拖曳 2 秒後自動保存；"
+        "拖動圓點即可微調 X/Y 座標，停止拖曳 5 秒後自動保存；"
         "原始熟悉度與好感度分數不會改變。"
     )
 

@@ -26,7 +26,7 @@ COMPONENT_HTML = """
       好感度：負面 ← → 喜歡
     </text>
   </svg>
-  <p class="drag-help">停止拖曳 2 秒後，會自動保存新座標。</p>
+  <p class="drag-help">停止拖曳 5 秒後，會自動保存新座標。</p>
 </div>
 """
 
@@ -239,7 +239,7 @@ export default function(component) {
         points: movedPoints,
         eventId: `${Date.now()}`
       });
-    }, 2000);
+    }, 5000);
   };
 
   const movePointElement = (point) => {

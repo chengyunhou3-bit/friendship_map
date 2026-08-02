@@ -644,6 +644,29 @@ def confirm_keypad_pin(record):
 )
 def show_pin_keypad(record):
     st.caption(record["title"])
+    st.markdown(
+        """
+        <style>
+        .st-key-pin_keypad_grid [data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 0.5rem !important;
+        }
+        .st-key-pin_keypad_grid [data-testid="stColumn"],
+        .st-key-pin_keypad_grid [data-testid="column"] {
+            flex: 1 1 0 !important;
+            width: 0 !important;
+            min-width: 0 !important;
+        }
+        .st-key-pin_keypad_grid button {
+            min-height: 3rem;
+            font-size: 1.15rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
     entered_length = len(st.session_state.pin_keypad_value)
     pin_display = "● " * entered_length if entered_length else "請輸入 PIN"
@@ -658,8 +681,10 @@ def show_pin_keypad(record):
     if st.session_state.pin_keypad_error:
         st.error(st.session_state.pin_keypad_error)
 
+    keypad_grid = st.container(key="pin_keypad_grid")
+
     for row in (("1", "2", "3"), ("4", "5", "6"), ("7", "8", "9")):
-        columns = st.columns(3)
+        columns = keypad_grid.columns(3)
         for column, digit in zip(columns, row):
             column.button(
                 digit,
@@ -669,7 +694,7 @@ def show_pin_keypad(record):
                 args=(digit, record)
             )
 
-    backspace_column, zero_column, confirm_column = st.columns(3)
+    backspace_column, zero_column, confirm_column = keypad_grid.columns(3)
     backspace_column.button(
         "⌫",
         key=f"pin_key_{record['id']}_backspace",

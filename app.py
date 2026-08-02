@@ -300,6 +300,9 @@ def initialize_state():
         "display_settings_loaded": False,
         "pin_protection": None,
         "pin_prompt_open": False,
+        "pin_prompt_record_id": None,
+        "pin_keypad_value": "",
+        "pin_keypad_error": "",
         "pin_settings_record_id": None,
         "current_record_id": None,
         "selected_record_id": None,
@@ -555,6 +558,147 @@ def load_saved_into_state(record):
     st.session_state.answer_history = []
     st.session_state.editor_version += 1
     st.session_state.stage = "results"
+
+
+def close_pin_prompt():
+    st.session_state.pin_prompt_open = False
+    st.session_state.pin_prompt_record_id = None
+    st.session_state.pin_keypad_value = ""
+    st.session_state.pin_keypad_error = ""
+
+
+def open_pin_prompt(record):
+    st.session_state.pin_prompt_open = True
+    st.session_state.pin_prompt_record_id = record["id"]
+    st.session_state.pin_keypad_value = ""
+    st.session_state.pin_keypad_error = ""
+
+
+def complete_pin_unlock(record, entered_pin, pin_protection):
+    if not isinstance(pin_protection.get("length"), int):
+        upgraded_protection = dict(pin_protection)
+        upgraded_protection["length"] = len(str(entered_pin))
+        save_pin_protection(record, upgraded_protection)
+    load_saved_into_state(record)
+    close_pin_prompt()
+
+
+def try_unlock_record(record, entered_pin):
+    pin_protection = record["result"].get("pin_protection")
+
+    if verify_pin(entered_pin, pin_protection):
+        complete_pin_unlock(record, entered_pin, pin_protection)
+        return True
+
+    st.session_state.pin_keypad_value = ""
+    st.session_state.pin_keypad_error = "PIN 錯誤，請再試一次。"
+    return False
+
+
+def enter_pin_digit(digit, record):
+    current_pin = st.session_state.pin_keypad_value
+    if len(current_pin) >= 8:
+        return
+
+    entered_pin = f"{current_pin}{digit}"
+    st.session_state.pin_keypad_value = entered_pin
+    st.session_state.pin_keypad_error = ""
+
+    pin_protection = record["result"].get("pin_protection")
+    expected_length = pin_protection.get("length")
+
+    if verify_pin(entered_pin, pin_protection):
+        complete_pin_unlock(record, entered_pin, pin_protection)
+    elif (
+        isinstance(expected_length, int)
+        and 4 <= expected_length <= 8
+        and len(entered_pin) >= expected_length
+    ) or len(entered_pin) >= 8:
+        st.session_state.pin_keypad_value = ""
+        st.session_state.pin_keypad_error = "PIN 錯誤，請再試一次。"
+
+
+def remove_pin_digit():
+    st.session_state.pin_keypad_value = (
+        st.session_state.pin_keypad_value[:-1]
+    )
+    st.session_state.pin_keypad_error = ""
+
+
+def confirm_keypad_pin(record):
+    entered_pin = st.session_state.pin_keypad_value
+    valid, pin_error = validate_pin(entered_pin)
+
+    if not valid:
+        st.session_state.pin_keypad_error = pin_error
+        return
+
+    try_unlock_record(record, entered_pin)
+
+
+@st.dialog(
+    "輸入紀錄 PIN",
+    width="small",
+    icon="🔒",
+    on_dismiss=close_pin_prompt
+)
+def show_pin_keypad(record):
+    st.caption(record["title"])
+
+    entered_length = len(st.session_state.pin_keypad_value)
+    pin_display = "● " * entered_length if entered_length else "請輸入 PIN"
+    st.markdown(
+        "<div style='padding:0.8rem;text-align:center;font-size:1.4rem;"
+        "letter-spacing:0.2rem;border:1px solid rgba(128,128,128,.35);"
+        "border-radius:.6rem;margin-bottom:.75rem'>"
+        f"{pin_display}</div>",
+        unsafe_allow_html=True
+    )
+
+    if st.session_state.pin_keypad_error:
+        st.error(st.session_state.pin_keypad_error)
+
+    for row in (("1", "2", "3"), ("4", "5", "6"), ("7", "8", "9")):
+        columns = st.columns(3)
+        for column, digit in zip(columns, row):
+            column.button(
+                digit,
+                key=f"pin_key_{record['id']}_{digit}",
+                width="stretch",
+                on_click=enter_pin_digit,
+                args=(digit, record)
+            )
+
+    backspace_column, zero_column, confirm_column = st.columns(3)
+    backspace_column.button(
+        "⌫",
+        key=f"pin_key_{record['id']}_backspace",
+        width="stretch",
+        on_click=remove_pin_digit,
+        disabled=entered_length == 0
+    )
+    zero_column.button(
+        "0",
+        key=f"pin_key_{record['id']}_0",
+        width="stretch",
+        on_click=enter_pin_digit,
+        args=("0", record)
+    )
+    confirm_column.button(
+        "✓",
+        key=f"pin_key_{record['id']}_confirm",
+        type="primary",
+        width="stretch",
+        on_click=confirm_keypad_pin,
+        args=(record,)
+    )
+
+    st.button(
+        "取消",
+        key=f"pin_key_{record['id']}_cancel",
+        width="stretch",
+        on_click=close_pin_prompt
+    )
 
 
 def apply_result_edits(ranking, edited_data):
@@ -904,7 +1048,7 @@ with st.sidebar:
                 ):
                     load_saved_into_state(selected_record)
                 else:
-                    st.session_state.pin_prompt_open = True
+                    open_pin_prompt(selected_record)
                 st.rerun()
         else:
             selected_results = selected_record["result"]
@@ -949,7 +1093,7 @@ with st.sidebar:
                             pin_protection
                         )
                         load_saved_into_state(selected_record)
-                        st.session_state.pin_prompt_open = False
+                        close_pin_prompt()
                         st.rerun()
                     else:
                         valid, pin_error = validate_pin(new_pin)
@@ -965,35 +1109,17 @@ with st.sidebar:
                                 pin_protection
                             )
                             load_saved_into_state(selected_record)
-                            st.session_state.pin_prompt_open = False
+                            close_pin_prompt()
                             st.rerun()
             else:
-                with st.form("unlock_saved_results_form"):
-                    entered_pin = st.text_input(
-                        "輸入紀錄 PIN",
-                        type="password",
-                        max_chars=8
-                    )
-                    unlock_results = st.form_submit_button(
-                        "解鎖並載入",
-                        type="primary",
-                        width="stretch"
-                    )
-
-                if unlock_results:
-                    if verify_pin(entered_pin, pin_protection):
-                        load_saved_into_state(selected_record)
-                        st.session_state.pin_prompt_open = False
-                        st.rerun()
-                    else:
-                        st.error("PIN 錯誤，請再試一次。")
+                st.caption("請在彈出的數字鍵盤輸入 PIN。")
 
             if st.button(
                 "取消",
                 key="cancel_pin_prompt",
                 width="stretch"
             ):
-                st.session_state.pin_prompt_open = False
+                close_pin_prompt()
                 st.rerun()
 
     if st.button("建立新紀錄", width="stretch"):
@@ -1229,6 +1355,20 @@ with st.sidebar:
             width="stretch",
             on_click=st.logout
         )
+
+
+if st.session_state.pin_prompt_open:
+    pin_prompt_record = get_record(
+        result_library,
+        st.session_state.pin_prompt_record_id
+    )
+    if (
+        pin_prompt_record is not None
+        and pin_protection_is_enabled(
+            pin_prompt_record["result"].get("pin_protection")
+        )
+    ):
+        show_pin_keypad(pin_prompt_record)
 
 
 if st.session_state.stage == "names":

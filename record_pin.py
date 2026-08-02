@@ -55,6 +55,7 @@ def create_pin_protection(pin):
     return {
         "algorithm": "pbkdf2_sha256",
         "iterations": PIN_ITERATIONS,
+        "length": len(pin),
         "salt": salt.hex(),
         "digest": digest.hex()
     }

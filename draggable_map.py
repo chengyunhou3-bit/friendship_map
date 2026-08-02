@@ -26,7 +26,12 @@ COMPONENT_HTML = """
       好感度：負面 ← → 喜歡
     </text>
   </svg>
-  <p class="drag-help">停止拖曳 5 秒後，會自動保存新座標。</p>
+  <div class="drag-controls">
+    <button id="save-coordinates" class="save-coordinates" type="button" disabled>
+      💾 儲存座標
+    </button>
+    <span id="save-status" class="save-status">拖曳後 30 秒自動儲存</span>
+  </div>
 </div>
 """
 
@@ -45,8 +50,8 @@ COMPONENT_CSS = """
 #relationship-map {
   display: block;
   width: 100%;
-  height: calc(100% - 2rem);
-  min-height: 520px;
+  height: calc(100% - 4.25rem);
+  min-height: 500px;
   touch-action: none;
   user-select: none;
 }
@@ -112,11 +117,42 @@ COMPONENT_CSS = """
   stroke-linejoin: round;
 }
 
-.drag-help {
-  margin: 0.25rem 0 0;
+.drag-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.save-coordinates {
+  border: 0;
+  border-radius: 0.55rem;
+  padding: 0.55rem 1rem;
+  color: white;
+  background: var(--st-primary-color);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.save-coordinates:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.save-status {
   color: color-mix(in srgb, var(--st-text-color) 70%, transparent);
   font-size: 0.9rem;
-  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .drag-controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.3rem;
+    text-align: center;
+  }
 }
 """
 
@@ -129,6 +165,8 @@ export default function(component) {
   const pointLayer = parentElement.querySelector("#point-layer");
   const xAxisTitle = parentElement.querySelector("#x-axis-title");
   const yAxisTitle = parentElement.querySelector("#y-axis-title");
+  const saveButton = parentElement.querySelector("#save-coordinates");
+  const saveStatus = parentElement.querySelector("#save-status");
   const svgNamespace = "http://www.w3.org/2000/svg";
 
   const left = 70;
@@ -220,6 +258,7 @@ export default function(component) {
   const pendingMoves = new Map();
   let activePoint = null;
   let saveTimer = null;
+  let lastMovementAt = 0;
 
   const cancelScheduledSave = () => {
     if (saveTimer === null) return;
@@ -227,20 +266,54 @@ export default function(component) {
     saveTimer = null;
   };
 
-  const scheduleSave = () => {
+  const flushPendingMoves = () => {
     cancelScheduledSave();
     if (pendingMoves.size === 0) return;
 
-    saveTimer = window.setTimeout(() => {
-      const movedPoints = Array.from(pendingMoves.values());
-      pendingMoves.clear();
-      saveTimer = null;
-      setTriggerValue("moved", {
-        points: movedPoints,
-        eventId: `${Date.now()}`
-      });
-    }, 5000);
+    const movedPoints = Array.from(pendingMoves.values());
+    pendingMoves.clear();
+    saveButton.disabled = true;
+    saveStatus.textContent = "正在儲存…";
+    setTriggerValue("moved", {
+      points: movedPoints,
+      eventId: `${Date.now()}`
+    });
   };
+
+  const scheduleSave = () => {
+    if (pendingMoves.size === 0 || saveTimer !== null) return;
+
+    const checkForIdle = () => {
+      saveTimer = null;
+      if (pendingMoves.size === 0) return;
+
+      const remainingTime = 30000 - (Date.now() - lastMovementAt);
+      if (remainingTime > 0) {
+        saveTimer = window.setTimeout(checkForIdle, remainingTime);
+        return;
+      }
+
+      flushPendingMoves();
+    };
+
+    saveTimer = window.setTimeout(checkForIdle, 30000);
+  };
+
+  const markPointAsPending = (point) => {
+    lastMovementAt = Date.now();
+    pendingMoves.set(point.name, {
+      name: point.name,
+      x: point.x,
+      y: point.y
+    });
+    if (saveButton.disabled) {
+      saveButton.disabled = false;
+      saveStatus.textContent = "尚未儲存；停止拖曳 30 秒後自動儲存";
+    }
+    scheduleSave();
+  };
+
+  saveButton.onclick = flushPendingMoves;
 
   const movePointElement = (point) => {
     const group = pointElements.get(point.name);
@@ -299,19 +372,14 @@ export default function(component) {
     activePoint.x = toValueX(svgPoint.x);
     activePoint.y = toValueY(svgPoint.y);
     movePointElement(activePoint);
+    markPointAsPending(activePoint);
   };
 
-  const finishDrag = (event) => {
+  const finishDrag = () => {
     if (!activePoint) return;
 
-    pendingMoves.set(activePoint.name, {
-      name: activePoint.name,
-      x: activePoint.x,
-      y: activePoint.y
-    });
-
+    markPointAsPending(activePoint);
     activePoint = null;
-    scheduleSave();
   };
 
   svg.onpointerup = finishDrag;
@@ -322,6 +390,7 @@ export default function(component) {
 
   return () => {
     cancelScheduledSave();
+    saveButton.onclick = null;
     svg.onpointermove = null;
     svg.onpointerup = null;
     svg.onpointercancel = null;

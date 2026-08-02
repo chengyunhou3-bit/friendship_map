@@ -584,6 +584,7 @@ def complete_pin_unlock(record, entered_pin, pin_protection):
     load_saved_into_state(record)
     close_pin_prompt()
     st.session_state.collapse_sidebar_requested = True
+    st.rerun(scope="app")
 
 
 def try_unlock_record(record, entered_pin):

@@ -641,19 +641,31 @@ def apply_dragged_point():
     if not isinstance(moved_point, dict):
         return
 
-    name = moved_point.get("name")
+    moved_points = moved_point.get("points")
+    if not isinstance(moved_points, list):
+        moved_points = [moved_point]
 
-    if name not in st.session_state.names:
+    applied_points = []
+    for point in moved_points:
+        if not isinstance(point, dict):
+            continue
+
+        name = point.get("name")
+        if name not in st.session_state.names:
+            continue
+
+        try:
+            x = max(-100, min(100, round(float(point["x"]))))
+            y = max(-100, min(100, round(float(point["y"]))))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        st.session_state.x_coordinates[name] = x
+        st.session_state.y_coordinates[name] = y
+        applied_points.append((name, x, y))
+
+    if not applied_points:
         return
-
-    try:
-        x = max(-100, min(100, round(float(moved_point["x"]))))
-        y = max(-100, min(100, round(float(moved_point["y"]))))
-    except (KeyError, TypeError, ValueError):
-        return
-
-    st.session_state.x_coordinates[name] = x
-    st.session_state.y_coordinates[name] = y
 
     save_current_results(
         st.session_state.names,
@@ -663,9 +675,15 @@ def apply_dragged_point():
         st.session_state.y_coordinates
     )
 
-    st.session_state.drag_message = (
-        f"{name} 的座標已更新為 ({x}, {y})"
-    )
+    if len(applied_points) == 1:
+        name, x, y = applied_points[0]
+        st.session_state.drag_message = (
+            f"{name} 的座標已更新為 ({x}, {y})"
+        )
+    else:
+        st.session_state.drag_message = (
+            f"已更新並保存 {len(applied_points)} 個人物的座標"
+        )
     st.session_state.editor_version += 1
 
 
@@ -1483,7 +1501,8 @@ elif st.session_state.stage == "results":
 
     st.markdown("### 🖐️ 拖曳調整座標")
     st.caption(
-        "拖動圓點即可微調 X/Y 座標；原始熟悉度與好感度分數不會改變。"
+        "拖動圓點即可微調 X/Y 座標，停止拖曳 2 秒後自動保存；"
+        "原始熟悉度與好感度分數不會改變。"
     )
 
     map_points = [

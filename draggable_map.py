@@ -26,7 +26,7 @@ COMPONENT_HTML = """
       好感度：負面 ← → 喜歡
     </text>
   </svg>
-  <p class="drag-help">拖曳名字的圓點，放開後會自動保存新座標。</p>
+  <p class="drag-help">停止拖曳 2 秒後，會自動保存新座標。</p>
 </div>
 """
 
@@ -217,7 +217,30 @@ export default function(component) {
     : [];
 
   const pointElements = new Map();
+  const pendingMoves = new Map();
   let activePoint = null;
+  let saveTimer = null;
+
+  const cancelScheduledSave = () => {
+    if (saveTimer === null) return;
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+  };
+
+  const scheduleSave = () => {
+    cancelScheduledSave();
+    if (pendingMoves.size === 0) return;
+
+    saveTimer = window.setTimeout(() => {
+      const movedPoints = Array.from(pendingMoves.values());
+      pendingMoves.clear();
+      saveTimer = null;
+      setTriggerValue("moved", {
+        points: movedPoints,
+        eventId: `${Date.now()}`
+      });
+    }, 2000);
+  };
 
   const movePointElement = (point) => {
     const group = pointElements.get(point.name);
@@ -252,6 +275,7 @@ export default function(component) {
 
     group.onpointerdown = (event) => {
       event.preventDefault();
+      cancelScheduledSave();
       activePoint = point;
       svg.setPointerCapture(event.pointerId);
     };
@@ -280,23 +304,24 @@ export default function(component) {
   const finishDrag = (event) => {
     if (!activePoint) return;
 
-    const movedPoint = {
+    pendingMoves.set(activePoint.name, {
       name: activePoint.name,
       x: activePoint.x,
-      y: activePoint.y,
-      eventId: `${Date.now()}-${event.pointerId}`
-    };
+      y: activePoint.y
+    });
 
     activePoint = null;
-    setTriggerValue("moved", movedPoint);
+    scheduleSave();
   };
 
   svg.onpointerup = finishDrag;
   svg.onpointercancel = () => {
     activePoint = null;
+    scheduleSave();
   };
 
   return () => {
+    cancelScheduledSave();
     svg.onpointermove = null;
     svg.onpointerup = null;
     svg.onpointercancel = null;

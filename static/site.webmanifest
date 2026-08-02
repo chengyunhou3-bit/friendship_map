@@ -2,7 +2,7 @@
   "name": "人際關係座標圖",
   "short_name": "關係座標",
   "description": "用兩兩比較建立自己的關係座標圖",
-  "start_url": "/",
+  "start_url": "/app/static/install.html",
   "display": "standalone",
   "background_color": "#16113f",
   "theme_color": "#241b63",

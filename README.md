@@ -73,10 +73,14 @@ Control + C
 
 ### 加到手機主畫面
 
-這個版本可以像 App 一樣放在手機主畫面，仍需連上網路才能使用。
+這個版本可以像 App 一樣放在手機主畫面，仍需連上網路才能使用。請先開啟專用安裝頁：
 
-- iPhone／iPad：用 Safari 開啟網站，點「分享」→「加入主畫面」。
-- Android：用 Chrome 開啟網站，點右上角選單 →「加到主畫面」或「安裝應用程式」。
+```text
+https://friendship-map-philip.streamlit.app/app/static/install.html
+```
+
+- iPhone／iPad：用 Safari 開啟安裝頁，點「分享」→「加入主畫面」。
+- Android：用 Chrome 開啟安裝頁，點右上角選單 →「加到主畫面」或「安裝應用程式」。
 
 安裝後會使用專案專屬圖示，點擊即可直接開啟網站。
 

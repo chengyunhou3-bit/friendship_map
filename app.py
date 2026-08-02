@@ -33,48 +33,6 @@ st.set_page_config(
     layout="centered"
 )
 
-
-def install_mobile_app_metadata():
-    """Add home-screen icon and standalone-app metadata to the parent page."""
-    st.iframe(
-        """
-        <script>
-        const parentDocument = window.parent.document;
-
-        function setLink(rel, href) {
-            let element = parentDocument.head.querySelector(`link[rel="${rel}"]`);
-            if (!element) {
-                element = parentDocument.createElement("link");
-                element.rel = rel;
-                parentDocument.head.appendChild(element);
-            }
-            element.href = href;
-        }
-
-        function setMeta(name, content) {
-            let element = parentDocument.head.querySelector(`meta[name="${name}"]`);
-            if (!element) {
-                element = parentDocument.createElement("meta");
-                element.name = name;
-                parentDocument.head.appendChild(element);
-            }
-            element.content = content;
-        }
-
-        setLink("apple-touch-icon", "/app/static/apple-touch-icon.png");
-        setLink("manifest", "/app/static/site.webmanifest");
-        setMeta("theme-color", "#241b63");
-        setMeta("apple-mobile-web-app-capable", "yes");
-        setMeta("apple-mobile-web-app-title", "關係座標");
-        </script>
-        """,
-        height=1,
-        width=1
-    )
-
-
-install_mobile_app_metadata()
-
 DEFAULT_DISPLAY_SETTINGS = {
     "app_title": "人際關係座標圖",
     "familiarity_question": "你跟誰比較熟？",

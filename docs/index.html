@@ -76,17 +76,23 @@
     <div class="instruction" id="instruction">
       iPhone：點 Safari 下方的「分享」，再選「加入主畫面」。
     </div>
-    <a href="https://friendship-map-philip.streamlit.app">先開啟網站</a>
+    <a id="open-app" href="https://friendship-map-philip.streamlit.app">開啟網站</a>
     <small>加入主畫面後仍需網路連線</small>
   </main>
   <script>
     const appUrl = "https://friendship-map-philip.streamlit.app";
+    const directOpenKey = "friendship-map-direct-open";
     const standalone = window.navigator.standalone === true
       || window.matchMedia("(display-mode: standalone)").matches;
+    const directOpenEnabled = localStorage.getItem(directOpenKey) === "yes";
 
-    if (standalone) {
+    if (standalone || directOpenEnabled) {
       window.location.replace(appUrl);
     }
+
+    document.getElementById("open-app").addEventListener("click", () => {
+      localStorage.setItem(directOpenKey, "yes");
+    });
 
     if (/Android/i.test(navigator.userAgent)) {
       document.getElementById("instruction").textContent =

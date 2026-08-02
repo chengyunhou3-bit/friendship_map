@@ -65,6 +65,17 @@ def cloud_mode_enabled():
     return secret_section("app").get("mode", "local") == "cloud"
 
 
+def guest_mode_enabled():
+    return (
+        cloud_mode_enabled()
+        and st.session_state.get("guest_mode", False)
+    )
+
+
+def user_is_logged_in():
+    return bool(getattr(st.user, "is_logged_in", False))
+
+
 def current_owner_id():
     subject = str(st.user.get("sub", ""))
 
@@ -111,6 +122,9 @@ def save_current_results(
     x_coordinates,
     y_coordinates
 ):
+    if guest_mode_enabled():
+        return
+
     if not cloud_mode_enabled():
         save_local_results(
             names,
@@ -139,6 +153,9 @@ def save_current_results(
 
 
 def load_current_results():
+    if guest_mode_enabled():
+        return None
+
     if not cloud_mode_enabled():
         return load_local_results()
 
@@ -151,6 +168,9 @@ def load_current_results():
 
 
 def delete_current_results():
+    if guest_mode_enabled():
+        return
+
     if not cloud_mode_enabled():
         return
 
@@ -169,6 +189,7 @@ def initialize_state():
         "pairs": [],
         "question_index": 0,
         "answer_history": [],
+        "guest_mode": False,
         "display_settings": normalized_display_settings(),
         "display_settings_loaded": False,
         "comparison_mode": "initial",
@@ -185,9 +206,22 @@ def initialize_state():
             st.session_state[key] = value
 
 
-def reset_app():
+def reset_app(preserve_access_mode=True):
+    was_guest = guest_mode_enabled()
+
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+
+    if preserve_access_mode and was_guest:
+        st.session_state.guest_mode = True
+
+
+def start_guest_mode():
+    st.session_state.guest_mode = True
+
+
+def exit_guest_mode():
+    reset_app(preserve_access_mode=False)
 
 
 def parse_names(raw_names):
@@ -541,15 +575,25 @@ def make_figure():
     return figure
 
 
-if cloud_mode_enabled() and not st.user.is_logged_in:
+if (
+    cloud_mode_enabled()
+    and not user_is_logged_in()
+    and not guest_mode_enabled()
+):
     st.title("🗺️ 人際關係座標圖")
-    st.write("登入後建立自己的朋友評分；你的結果不會與其他人共用。")
+    st.write("登入可保存並載入自己的結果；也可以不登入單次使用。")
     st.button(
         "使用 Google 登入",
         type="primary",
         width="stretch",
         on_click=st.login
     )
+    st.button(
+        "以訪客身分使用",
+        width="stretch",
+        on_click=start_guest_mode
+    )
+    st.caption("訪客結果不會儲存，離開後無法載入。")
     st.stop()
 
 
@@ -663,7 +707,9 @@ st.caption("用兩兩比較，把朋友放進熟悉度與好感度座標。")
 with st.sidebar:
     st.subheader("選單")
 
-    if cloud_mode_enabled():
+    if guest_mode_enabled():
+        st.caption("訪客模式：結果不會儲存")
+    elif cloud_mode_enabled():
         display_name = st.user.get("name") or st.user.get("email")
         if display_name:
             st.caption(f"已登入：{display_name}")
@@ -677,7 +723,14 @@ with st.sidebar:
         reset_app()
         st.rerun()
 
-    if cloud_mode_enabled():
+    if guest_mode_enabled():
+        st.divider()
+        st.button(
+            "結束訪客模式",
+            width="stretch",
+            on_click=exit_guest_mode
+        )
+    elif cloud_mode_enabled():
         st.divider()
 
         with st.expander("帳號與資料"):
@@ -812,6 +865,12 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 elif st.session_state.stage == "results":
     st.subheader("4. 最終結果")
 
+    if guest_mode_enabled():
+        st.info(
+            "目前是訪客模式：可繼續查看與編輯本次結果，"
+            "但離開後無法載入。"
+        )
+
     if st.session_state.answer_history:
         st.button(
             "← 回上一題",
@@ -856,19 +915,20 @@ elif st.session_state.stage == "results":
                 start_incremental_comparison(new_names)
                 st.rerun()
 
-    if st.button(
-        "儲存目前結果",
-        type="primary",
-        width="stretch"
-    ):
-        save_current_results(
-            st.session_state.names,
-            st.session_state.familiarity_scores,
-            st.session_state.likability_scores,
-            st.session_state.x_coordinates,
-            st.session_state.y_coordinates
-        )
-        st.success("目前畫面中的結果已保存。")
+    if not guest_mode_enabled():
+        if st.button(
+            "儲存目前結果",
+            type="primary",
+            width="stretch"
+        ):
+            save_current_results(
+                st.session_state.names,
+                st.session_state.familiarity_scores,
+                st.session_state.likability_scores,
+                st.session_state.x_coordinates,
+                st.session_state.y_coordinates
+            )
+            st.success("目前畫面中的結果已保存。")
 
     ranking = sorted(
         st.session_state.names,

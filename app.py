@@ -657,7 +657,7 @@ def confirm_keypad_pin(record):
     return try_unlock_record(record, entered_pin)
 
 
-def ignore_pin_keyboard_event():
+def ignore_pin_keyboard_action():
     pass
 
 
@@ -694,54 +694,51 @@ def show_pin_keypad(record):
         unsafe_allow_html=True
     )
 
-    keyboard_result = pin_keyboard_listener(
-        data={"currentPin": st.session_state.pin_keypad_value},
-        key=f"pin_keyboard_{record['id']}",
-        on_key_change=ignore_pin_keyboard_event,
-        width=1,
-        height=1
+    pin_protection = record["result"].get("pin_protection")
+    expected_pin_length = (
+        pin_protection.get("length")
+        if isinstance(pin_protection, dict)
+        else None
     )
-    keyboard_event = getattr(keyboard_result, "key", None)
+    keyboard_result = pin_keyboard_listener(
+        data={
+            "currentPin": st.session_state.pin_keypad_value,
+            "expectedLength": expected_pin_length
+        },
+        key=f"pin_keyboard_{record['id']}",
+        on_action_change=ignore_pin_keyboard_action,
+        width="stretch",
+        height=64
+    )
+    keyboard_event = getattr(keyboard_result, "action", None)
 
     if isinstance(keyboard_event, dict):
         event_id = keyboard_event.get("eventId")
-        pressed_key = keyboard_event.get("key")
+        action_type = keyboard_event.get("type")
         keyboard_pin = keyboard_event.get("value")
 
         if event_id != st.session_state.pin_keyboard_event_id:
             st.session_state.pin_keyboard_event_id = event_id
 
-            if isinstance(pressed_key, str) and pressed_key.isdigit():
-                if apply_pin_value(keyboard_pin, record):
-                    st.rerun(scope="app")
-            elif pressed_key == "Backspace":
+            if action_type == "submit":
                 if (
                     isinstance(keyboard_pin, str)
                     and (not keyboard_pin or keyboard_pin.isdigit())
                 ):
                     st.session_state.pin_keypad_value = keyboard_pin
-                    st.session_state.pin_keypad_error = ""
-            elif pressed_key == "Enter":
-                if (
-                    isinstance(keyboard_pin, str)
-                    and (not keyboard_pin or keyboard_pin.isdigit())
-                ):
-                    st.session_state.pin_keypad_value = keyboard_pin
+                else:
+                    st.session_state.pin_keypad_error = (
+                        "PIN 只能輸入數字。"
+                    )
+                    st.rerun(scope="fragment")
                 if confirm_keypad_pin(record):
                     st.rerun(scope="app")
-            elif pressed_key == "Escape":
+                st.rerun(scope="fragment")
+            elif action_type == "cancel":
                 close_pin_prompt()
                 st.rerun(scope="app")
 
     entered_length = len(st.session_state.pin_keypad_value)
-    pin_display = "● " * entered_length if entered_length else "請輸入 PIN"
-    st.markdown(
-        "<div style='padding:0.8rem;text-align:center;font-size:1.4rem;"
-        "letter-spacing:0.2rem;border:1px solid rgba(128,128,128,.35);"
-        "border-radius:.6rem;margin-bottom:.75rem'>"
-        f"{pin_display}</div>",
-        unsafe_allow_html=True
-    )
 
     if st.session_state.pin_keypad_error:
         st.error(st.session_state.pin_keypad_error)

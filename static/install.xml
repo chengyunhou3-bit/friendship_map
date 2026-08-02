@@ -1,16 +1,16 @@
-<!doctype html>
-<html lang="zh-Hant">
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-Hant" xml:lang="zh-Hant">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#241b63">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="關係座標">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#241b63" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="關係座標" />
   <title>安裝人際關係座標圖</title>
-  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png">
-  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
+  <link rel="manifest" href="site.webmanifest" />
   <style>
     :root {
       color-scheme: dark;
@@ -70,7 +70,7 @@
 </head>
 <body>
   <main>
-    <img src="app-icon-192.png" alt="人際關係座標圖圖示">
+    <img src="app-icon-192.png" alt="人際關係座標圖圖示" />
     <h1>人際關係座標圖</h1>
     <p>把網站放到手機主畫面，下次就能像 App 一樣直接開啟。</p>
     <div class="instruction" id="instruction">
@@ -79,7 +79,7 @@
     <a href="/">先開啟網站</a>
     <small>加入主畫面後仍需網路連線</small>
   </main>
-  <script>
+  <script><![CDATA[
     const standalone = window.navigator.standalone === true
       || window.matchMedia("(display-mode: standalone)").matches;
 
@@ -91,6 +91,6 @@
       document.getElementById("instruction").textContent =
         "Android：點 Chrome 右上角選單，再選「加到主畫面」或「安裝應用程式」。";
     }
-  </script>
+  ]]></script>
 </body>
 </html>

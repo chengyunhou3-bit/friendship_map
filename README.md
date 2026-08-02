@@ -76,7 +76,7 @@ Control + C
 這個版本可以像 App 一樣放在手機主畫面，仍需連上網路才能使用。請先開啟專用安裝頁：
 
 ```text
-https://friendship-map-philip.streamlit.app/app/static/install.html
+https://friendship-map-philip.streamlit.app/app/static/install.xml
 ```
 
 - iPhone／iPad：用 Safari 開啟安裝頁，點「分享」→「加入主畫面」。

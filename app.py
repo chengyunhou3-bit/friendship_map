@@ -25,6 +25,7 @@ from cloud_store import (
     save_cloud_results
 )
 from draggable_map import draggable_relationship_map
+from pin_keyboard import pin_keyboard_listener
 from sidebar_control import collapse_sidebar
 from result_library import (
     default_record_title,
@@ -304,6 +305,7 @@ def initialize_state():
         "pin_prompt_record_id": None,
         "pin_keypad_value": "",
         "pin_keypad_error": "",
+        "pin_keyboard_event_id": None,
         "pin_unlock_message": None,
         "collapse_sidebar_requested": False,
         "pin_settings_record_id": None,
@@ -568,6 +570,7 @@ def close_pin_prompt():
     st.session_state.pin_prompt_record_id = None
     st.session_state.pin_keypad_value = ""
     st.session_state.pin_keypad_error = ""
+    st.session_state.pin_keyboard_event_id = None
 
 
 def open_pin_prompt(record):
@@ -575,6 +578,7 @@ def open_pin_prompt(record):
     st.session_state.pin_prompt_record_id = record["id"]
     st.session_state.pin_keypad_value = ""
     st.session_state.pin_keypad_error = ""
+    st.session_state.pin_keyboard_event_id = None
 
 
 def complete_pin_unlock(record, entered_pin, pin_protection):
@@ -602,12 +606,11 @@ def try_unlock_record(record, entered_pin):
     return False
 
 
-def enter_pin_digit(digit, record):
-    current_pin = st.session_state.pin_keypad_value
-    if len(current_pin) >= 8:
+def apply_pin_value(entered_pin, record):
+    entered_pin = str(entered_pin)
+    if not entered_pin.isdigit() or len(entered_pin) > 8:
         return False
 
-    entered_pin = f"{current_pin}{digit}"
     st.session_state.pin_keypad_value = entered_pin
     st.session_state.pin_keypad_error = ""
 
@@ -628,6 +631,14 @@ def enter_pin_digit(digit, record):
     return False
 
 
+def enter_pin_digit(digit, record):
+    current_pin = st.session_state.pin_keypad_value
+    if len(current_pin) >= 8:
+        return False
+
+    return apply_pin_value(f"{current_pin}{digit}", record)
+
+
 def remove_pin_digit():
     st.session_state.pin_keypad_value = (
         st.session_state.pin_keypad_value[:-1]
@@ -646,6 +657,10 @@ def confirm_keypad_pin(record):
     return try_unlock_record(record, entered_pin)
 
 
+def ignore_pin_keyboard_event():
+    pass
+
+
 @st.dialog(
     "輸入紀錄 PIN",
     width="small",
@@ -654,6 +669,7 @@ def confirm_keypad_pin(record):
 )
 def show_pin_keypad(record):
     st.caption(record["title"])
+    st.caption("可直接使用電腦數字鍵輸入，Enter 確認。")
     st.markdown(
         """
         <style>
@@ -677,6 +693,45 @@ def show_pin_keypad(record):
         """,
         unsafe_allow_html=True
     )
+
+    keyboard_result = pin_keyboard_listener(
+        data={"currentPin": st.session_state.pin_keypad_value},
+        key=f"pin_keyboard_{record['id']}",
+        on_key_change=ignore_pin_keyboard_event,
+        width=1,
+        height=1
+    )
+    keyboard_event = getattr(keyboard_result, "key", None)
+
+    if isinstance(keyboard_event, dict):
+        event_id = keyboard_event.get("eventId")
+        pressed_key = keyboard_event.get("key")
+        keyboard_pin = keyboard_event.get("value")
+
+        if event_id != st.session_state.pin_keyboard_event_id:
+            st.session_state.pin_keyboard_event_id = event_id
+
+            if isinstance(pressed_key, str) and pressed_key.isdigit():
+                if apply_pin_value(keyboard_pin, record):
+                    st.rerun(scope="app")
+            elif pressed_key == "Backspace":
+                if (
+                    isinstance(keyboard_pin, str)
+                    and (not keyboard_pin or keyboard_pin.isdigit())
+                ):
+                    st.session_state.pin_keypad_value = keyboard_pin
+                    st.session_state.pin_keypad_error = ""
+            elif pressed_key == "Enter":
+                if (
+                    isinstance(keyboard_pin, str)
+                    and (not keyboard_pin or keyboard_pin.isdigit())
+                ):
+                    st.session_state.pin_keypad_value = keyboard_pin
+                if confirm_keypad_pin(record):
+                    st.rerun(scope="app")
+            elif pressed_key == "Escape":
+                close_pin_prompt()
+                st.rerun(scope="app")
 
     entered_length = len(st.session_state.pin_keypad_value)
     pin_display = "● " * entered_length if entered_length else "請輸入 PIN"

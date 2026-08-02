@@ -25,6 +25,7 @@ from cloud_store import (
     save_cloud_results
 )
 from draggable_map import draggable_relationship_map
+from sidebar_control import collapse_sidebar
 from result_library import (
     default_record_title,
     delete_record as remove_record_from_library,
@@ -303,6 +304,7 @@ def initialize_state():
         "pin_prompt_record_id": None,
         "pin_keypad_value": "",
         "pin_keypad_error": "",
+        "collapse_sidebar_requested": False,
         "pin_settings_record_id": None,
         "current_record_id": None,
         "selected_record_id": None,
@@ -581,6 +583,7 @@ def complete_pin_unlock(record, entered_pin, pin_protection):
         save_pin_protection(record, upgraded_protection)
     load_saved_into_state(record)
     close_pin_prompt()
+    st.session_state.collapse_sidebar_requested = True
 
 
 def try_unlock_record(record, entered_pin):
@@ -1380,6 +1383,14 @@ with st.sidebar:
             width="stretch",
             on_click=st.logout
         )
+
+
+if st.session_state.pop("collapse_sidebar_requested", False):
+    collapse_sidebar(
+        key=f"collapse_sidebar_{st.session_state.editor_version}",
+        width=1,
+        height=1
+    )
 
 
 if st.session_state.pin_prompt_open:

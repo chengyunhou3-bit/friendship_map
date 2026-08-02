@@ -300,6 +300,7 @@ def initialize_state():
         "display_settings_loaded": False,
         "pin_protection": None,
         "pin_prompt_open": False,
+        "pin_settings_record_id": None,
         "current_record_id": None,
         "selected_record_id": None,
         "record_selector": None,
@@ -1017,124 +1018,155 @@ with st.sidebar:
             selected_pin_protection = selected_record["result"].get(
                 "pin_protection"
             )
+            pin_settings_open = (
+                st.session_state.pin_settings_record_id
+                == selected_record["id"]
+            )
 
             if pin_protection_is_enabled(selected_pin_protection):
                 st.markdown("**🔒 PIN 保護已啟用**")
-
-                with st.form(
-                    f"change_record_pin_form_{selected_record['id']}"
-                ):
-                    current_pin_for_change = st.text_input(
-                        "目前 PIN",
-                        type="password",
-                        max_chars=8,
-                        key=f"current_pin_change_{selected_record['id']}"
-                    )
-                    changed_pin = st.text_input(
-                        "新 PIN",
-                        type="password",
-                        max_chars=8,
-                        key=f"changed_pin_{selected_record['id']}"
-                    )
-                    changed_pin_confirm = st.text_input(
-                        "再次輸入新 PIN",
-                        type="password",
-                        max_chars=8,
-                        key=f"changed_pin_confirm_{selected_record['id']}"
-                    )
-                    change_pin = st.form_submit_button(
-                        "更改 PIN",
-                        type="primary",
-                        width="stretch"
-                    )
-
-                if change_pin:
-                    valid, pin_error = validate_pin(changed_pin)
-
-                    if not verify_pin(
-                        current_pin_for_change,
-                        selected_pin_protection
-                    ):
-                        st.error("目前 PIN 錯誤。")
-                    elif not valid:
-                        st.error(pin_error)
-                    elif changed_pin != changed_pin_confirm:
-                        st.error("兩次輸入的新 PIN 不一致。")
-                    else:
-                        save_pin_protection(
-                            selected_record,
-                            create_pin_protection(changed_pin)
-                        )
-                        st.rerun()
-
-                with st.form(
-                    f"disable_record_pin_form_{selected_record['id']}"
-                ):
-                    current_pin_for_disable = st.text_input(
-                        "目前 PIN（關閉保護）",
-                        type="password",
-                        max_chars=8,
-                        key=f"current_pin_disable_{selected_record['id']}"
-                    )
-                    confirm_disable_pin = st.checkbox(
-                        "我確定要關閉 PIN 保護",
-                        key=f"confirm_disable_pin_{selected_record['id']}"
-                    )
-                    disable_pin = st.form_submit_button(
-                        "關閉 PIN 保護",
-                        disabled=not confirm_disable_pin,
-                        width="stretch"
-                    )
-
-                if disable_pin:
-                    if verify_pin(
-                        current_pin_for_disable,
-                        selected_pin_protection
-                    ):
-                        save_pin_protection(
-                            selected_record,
-                            disabled_pin_protection()
-                        )
-                        st.rerun()
-                    else:
-                        st.error("目前 PIN 錯誤，無法關閉保護。")
             else:
                 st.markdown("**PIN 保護未啟用**")
 
-                with st.form(
-                    f"enable_record_pin_form_{selected_record['id']}"
-                ):
-                    settings_pin = st.text_input(
-                        "建立 PIN",
-                        type="password",
-                        max_chars=8,
-                        key=f"enable_pin_{selected_record['id']}"
-                    )
-                    settings_pin_confirm = st.text_input(
-                        "再次輸入 PIN",
-                        type="password",
-                        max_chars=8,
-                        key=f"enable_pin_confirm_{selected_record['id']}"
-                    )
-                    enable_pin = st.form_submit_button(
-                        "啟用 PIN 保護",
-                        type="primary",
-                        width="stretch"
-                    )
+            if st.button(
+                "收起 PIN 設定" if pin_settings_open else "調整 PIN",
+                key=f"toggle_pin_settings_{selected_record['id']}",
+                width="stretch"
+            ):
+                st.session_state.pin_settings_record_id = (
+                    None if pin_settings_open else selected_record["id"]
+                )
+                st.rerun()
 
-                if enable_pin:
-                    valid, pin_error = validate_pin(settings_pin)
-
-                    if not valid:
-                        st.error(pin_error)
-                    elif settings_pin != settings_pin_confirm:
-                        st.error("兩次輸入的 PIN 不一致。")
-                    else:
-                        save_pin_protection(
-                            selected_record,
-                            create_pin_protection(settings_pin)
+            if pin_settings_open:
+                if pin_protection_is_enabled(selected_pin_protection):
+                    with st.form(
+                        f"change_record_pin_form_{selected_record['id']}"
+                    ):
+                        current_pin_for_change = st.text_input(
+                            "目前 PIN",
+                            type="password",
+                            max_chars=8,
+                            key=f"current_pin_change_{selected_record['id']}"
                         )
-                        st.rerun()
+                        changed_pin = st.text_input(
+                            "新 PIN",
+                            type="password",
+                            max_chars=8,
+                            key=f"changed_pin_{selected_record['id']}"
+                        )
+                        changed_pin_confirm = st.text_input(
+                            "再次輸入新 PIN",
+                            type="password",
+                            max_chars=8,
+                            key=(
+                                "changed_pin_confirm_"
+                                f"{selected_record['id']}"
+                            )
+                        )
+                        change_pin = st.form_submit_button(
+                            "更改 PIN",
+                            type="primary",
+                            width="stretch"
+                        )
+
+                    if change_pin:
+                        valid, pin_error = validate_pin(changed_pin)
+
+                        if not verify_pin(
+                            current_pin_for_change,
+                            selected_pin_protection
+                        ):
+                            st.error("目前 PIN 錯誤。")
+                        elif not valid:
+                            st.error(pin_error)
+                        elif changed_pin != changed_pin_confirm:
+                            st.error("兩次輸入的新 PIN 不一致。")
+                        else:
+                            save_pin_protection(
+                                selected_record,
+                                create_pin_protection(changed_pin)
+                            )
+                            st.session_state.pin_settings_record_id = None
+                            st.rerun()
+
+                    with st.form(
+                        f"disable_record_pin_form_{selected_record['id']}"
+                    ):
+                        current_pin_for_disable = st.text_input(
+                            "目前 PIN（關閉保護）",
+                            type="password",
+                            max_chars=8,
+                            key=(
+                                "current_pin_disable_"
+                                f"{selected_record['id']}"
+                            )
+                        )
+                        confirm_disable_pin = st.checkbox(
+                            "我確定要關閉 PIN 保護",
+                            key=(
+                                "confirm_disable_pin_"
+                                f"{selected_record['id']}"
+                            )
+                        )
+                        disable_pin = st.form_submit_button(
+                            "關閉 PIN 保護",
+                            disabled=not confirm_disable_pin,
+                            width="stretch"
+                        )
+
+                    if disable_pin:
+                        if verify_pin(
+                            current_pin_for_disable,
+                            selected_pin_protection
+                        ):
+                            save_pin_protection(
+                                selected_record,
+                                disabled_pin_protection()
+                            )
+                            st.session_state.pin_settings_record_id = None
+                            st.rerun()
+                        else:
+                            st.error("目前 PIN 錯誤，無法關閉保護。")
+                else:
+                    with st.form(
+                        f"enable_record_pin_form_{selected_record['id']}"
+                    ):
+                        settings_pin = st.text_input(
+                            "建立 PIN",
+                            type="password",
+                            max_chars=8,
+                            key=f"enable_pin_{selected_record['id']}"
+                        )
+                        settings_pin_confirm = st.text_input(
+                            "再次輸入 PIN",
+                            type="password",
+                            max_chars=8,
+                            key=(
+                                "enable_pin_confirm_"
+                                f"{selected_record['id']}"
+                            )
+                        )
+                        enable_pin = st.form_submit_button(
+                            "啟用 PIN 保護",
+                            type="primary",
+                            width="stretch"
+                        )
+
+                    if enable_pin:
+                        valid, pin_error = validate_pin(settings_pin)
+
+                        if not valid:
+                            st.error(pin_error)
+                        elif settings_pin != settings_pin_confirm:
+                            st.error("兩次輸入的 PIN 不一致。")
+                        else:
+                            save_pin_protection(
+                                selected_record,
+                                create_pin_protection(settings_pin)
+                            )
+                            st.session_state.pin_settings_record_id = None
+                            st.rerun()
 
             st.divider()
             confirm_delete_record = st.checkbox(

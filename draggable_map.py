@@ -12,10 +12,11 @@ COMPONENT_HTML = """
     <rect class="plot-background" x="70" y="30" width="580" height="520"></rect>
     <g id="grid-layer"></g>
     <g id="point-layer"></g>
-    <text class="axis-title" x="360" y="603" text-anchor="middle">
+    <text id="x-axis-title" class="axis-title" x="360" y="603" text-anchor="middle">
       熟悉度：不熟 ← → 熟悉
     </text>
     <text
+      id="y-axis-title"
       class="axis-title"
       x="18"
       y="290"
@@ -126,6 +127,8 @@ export default function(component) {
   const svg = parentElement.querySelector("#relationship-map");
   const gridLayer = parentElement.querySelector("#grid-layer");
   const pointLayer = parentElement.querySelector("#point-layer");
+  const xAxisTitle = parentElement.querySelector("#x-axis-title");
+  const yAxisTitle = parentElement.querySelector("#y-axis-title");
   const svgNamespace = "http://www.w3.org/2000/svg";
 
   const left = 70;
@@ -135,6 +138,11 @@ export default function(component) {
   const plotWidth = right - left;
   const plotHeight = bottom - top;
   const ticks = [-100, -50, 0, 50, 100];
+
+  xAxisTitle.textContent = data?.axisTitles?.x
+    || "熟悉度：不熟 ← → 熟悉";
+  yAxisTitle.textContent = data?.axisTitles?.y
+    || "好感度：負面 ← → 喜歡";
 
   const clamp = (value) => Math.max(-100, Math.min(100, value));
   const toPixelX = (value) => left + ((value + 100) / 200) * plotWidth;
@@ -303,4 +311,3 @@ draggable_relationship_map = st.components.v2.component(
     css=COMPONENT_CSS,
     js=COMPONENT_JS
 )
-

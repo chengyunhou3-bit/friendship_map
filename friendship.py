@@ -147,7 +147,8 @@ def save_results(
     familiarity_scores,
     likability_scores,
     x_coordinates,
-    y_coordinates
+    y_coordinates,
+    display_settings=None
 ):
     data = {
         "saved_at": datetime.now().isoformat(timespec="seconds"),
@@ -157,6 +158,9 @@ def save_results(
         "x_coordinates": x_coordinates,
         "y_coordinates": y_coordinates
     }
+
+    if display_settings is not None:
+        data["display_settings"] = display_settings
 
     with RESULTS_FILE.open("w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=2)

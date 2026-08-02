@@ -33,6 +33,26 @@ st.set_page_config(
     layout="centered"
 )
 
+DEFAULT_DISPLAY_SETTINGS = {
+    "app_title": "人際關係座標圖",
+    "familiarity_question": "你跟誰比較熟？",
+    "likability_question": "誰的人品更好？",
+    "x_axis_title": "熟悉度：不熟 ← → 熟悉",
+    "y_axis_title": "好感度：負面 ← → 喜歡"
+}
+
+
+def normalized_display_settings(settings=None):
+    normalized = dict(DEFAULT_DISPLAY_SETTINGS)
+
+    if isinstance(settings, dict):
+        for key in normalized:
+            value = str(settings.get(key, "")).strip()
+            if value:
+                normalized[key] = value[:80]
+
+    return normalized
+
 
 def secret_section(name):
     try:
@@ -70,7 +90,8 @@ def build_result_data(
     familiarity_scores,
     likability_scores,
     x_coordinates,
-    y_coordinates
+    y_coordinates,
+    display_settings
 ):
     return {
         "saved_at": datetime.now().isoformat(timespec="seconds"),
@@ -78,7 +99,8 @@ def build_result_data(
         "familiarity_scores": familiarity_scores,
         "likability_scores": likability_scores,
         "x_coordinates": x_coordinates,
-        "y_coordinates": y_coordinates
+        "y_coordinates": y_coordinates,
+        "display_settings": normalized_display_settings(display_settings)
     }
 
 
@@ -95,7 +117,8 @@ def save_current_results(
             familiarity_scores,
             likability_scores,
             x_coordinates,
-            y_coordinates
+            y_coordinates,
+            display_settings=st.session_state.display_settings
         )
         return
 
@@ -109,7 +132,8 @@ def save_current_results(
             familiarity_scores,
             likability_scores,
             x_coordinates,
-            y_coordinates
+            y_coordinates,
+            st.session_state.display_settings
         )
     )
 
@@ -145,6 +169,8 @@ def initialize_state():
         "pairs": [],
         "question_index": 0,
         "answer_history": [],
+        "display_settings": normalized_display_settings(),
+        "display_settings_loaded": False,
         "comparison_mode": "initial",
         "new_names": [],
         "editor_version": 0,
@@ -360,6 +386,9 @@ def load_saved_into_state(saved_results):
     ]
     st.session_state.x_coordinates = saved_results["x_coordinates"]
     st.session_state.y_coordinates = saved_results["y_coordinates"]
+    st.session_state.display_settings = normalized_display_settings(
+        saved_results.get("display_settings")
+    )
     st.session_state.comparison_mode = "initial"
     st.session_state.new_names = []
     st.session_state.pairs = []
@@ -503,9 +532,10 @@ def make_figure():
 
     axis.set_xlim(-110, 110)
     axis.set_ylim(-110, 110)
-    axis.set_xlabel("熟悉度：不熟 ← → 熟悉")
-    axis.set_ylabel("好感度：負面 ← → 喜歡")
-    axis.set_title("人際關係座標圖")
+    settings = st.session_state.display_settings
+    axis.set_xlabel(settings["x_axis_title"])
+    axis.set_ylabel(settings["y_axis_title"])
+    axis.set_title(settings["app_title"])
     axis.grid(alpha=0.2)
 
     return figure
@@ -532,7 +562,102 @@ except Exception as error:
     st.exception(error)
     st.stop()
 
-st.title("🗺️ 人際關係座標圖")
+if not st.session_state.display_settings_loaded:
+    if saved_results is not None:
+        st.session_state.display_settings = normalized_display_settings(
+            saved_results.get("display_settings")
+        )
+    st.session_state.display_settings_loaded = True
+
+title_column, settings_column = st.columns(
+    [0.88, 0.12],
+    vertical_alignment="center"
+)
+
+with title_column:
+    st.title(f"🗺️ {st.session_state.display_settings['app_title']}")
+
+with settings_column:
+    with st.popover("⚙️", help="自訂標題與問題文字"):
+        st.markdown("#### 自訂文字")
+        current_settings = st.session_state.display_settings
+
+        with st.form("display_settings_form"):
+            custom_app_title = st.text_input(
+                "畫面標題",
+                value=current_settings["app_title"],
+                max_chars=80
+            )
+            custom_familiarity_question = st.text_input(
+                "第一組選擇題",
+                value=current_settings["familiarity_question"],
+                max_chars=80
+            )
+            custom_likability_question = st.text_input(
+                "第二組選擇題",
+                value=current_settings["likability_question"],
+                max_chars=80
+            )
+            custom_x_axis_title = st.text_input(
+                "X 軸標題",
+                value=current_settings["x_axis_title"],
+                max_chars=80
+            )
+            custom_y_axis_title = st.text_input(
+                "Y 軸標題",
+                value=current_settings["y_axis_title"],
+                max_chars=80
+            )
+
+            save_custom_text = st.form_submit_button(
+                "套用文字",
+                type="primary",
+                width="stretch"
+            )
+            restore_default_text = st.form_submit_button(
+                "恢復預設",
+                width="stretch"
+            )
+
+        if save_custom_text:
+            new_settings = {
+                "app_title": custom_app_title,
+                "familiarity_question": custom_familiarity_question,
+                "likability_question": custom_likability_question,
+                "x_axis_title": custom_x_axis_title,
+                "y_axis_title": custom_y_axis_title
+            }
+
+            if any(not value.strip() for value in new_settings.values()):
+                st.error("文字欄位不能留白。")
+            else:
+                st.session_state.display_settings = (
+                    normalized_display_settings(new_settings)
+                )
+
+                if st.session_state.stage == "results":
+                    save_current_results(
+                        st.session_state.names,
+                        st.session_state.familiarity_scores,
+                        st.session_state.likability_scores,
+                        st.session_state.x_coordinates,
+                        st.session_state.y_coordinates
+                    )
+                st.rerun()
+
+        if restore_default_text:
+            st.session_state.display_settings = normalized_display_settings()
+
+            if st.session_state.stage == "results":
+                save_current_results(
+                    st.session_state.names,
+                    st.session_state.familiarity_scores,
+                    st.session_state.likability_scores,
+                    st.session_state.x_coordinates,
+                    st.session_state.y_coordinates
+                )
+            st.rerun()
+
 st.caption("用兩兩比較，把朋友放進熟悉度與好感度座標。")
 
 with st.sidebar:
@@ -609,14 +734,18 @@ elif st.session_state.stage in ["familiarity", "likability"]:
         else:
             title = "2. 熟悉度比較"
 
-        question = "你跟誰比較熟？"
+        question = st.session_state.display_settings[
+            "familiarity_question"
+        ]
     else:
         if is_incremental:
             title = "新增人物：好感度比較"
         else:
             title = "3. 好感度比較"
 
-        question = "誰的人品更好？"
+        question = st.session_state.display_settings[
+            "likability_question"
+        ]
 
     st.subheader(title)
 
@@ -839,7 +968,13 @@ elif st.session_state.stage == "results":
     ]
 
     draggable_relationship_map(
-        data={"points": map_points},
+        data={
+            "points": map_points,
+            "axisTitles": {
+                "x": st.session_state.display_settings["x_axis_title"],
+                "y": st.session_state.display_settings["y_axis_title"]
+            }
+        },
         key="relationship_map_component",
         on_moved_change=apply_dragged_point,
         width="stretch",

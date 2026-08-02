@@ -965,7 +965,7 @@ with st.sidebar:
                 st.session_state.pin_prompt_open = False
                 st.rerun()
 
-    if st.button("重新開始", width="stretch"):
+    if st.button("建立新紀錄", width="stretch"):
         reset_app()
         st.rerun()
 
@@ -1222,6 +1222,10 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 
 
 elif st.session_state.stage == "results":
+    if st.button("← 回到主頁", width="stretch"):
+        reset_app()
+        st.rerun()
+
     st.subheader("4. 最終結果")
 
     if guest_mode_enabled():

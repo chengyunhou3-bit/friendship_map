@@ -304,6 +304,7 @@ def initialize_state():
         "pin_prompt_record_id": None,
         "pin_keypad_value": "",
         "pin_keypad_error": "",
+        "pin_unlock_message": None,
         "collapse_sidebar_requested": False,
         "pin_settings_record_id": None,
         "current_record_id": None,
@@ -583,8 +584,10 @@ def complete_pin_unlock(record, entered_pin, pin_protection):
         save_pin_protection(record, upgraded_protection)
     load_saved_into_state(record)
     close_pin_prompt()
+    st.session_state.pin_unlock_message = (
+        f"PIN 正確，已載入「{record['title']}」。"
+    )
     st.session_state.collapse_sidebar_requested = True
-    st.rerun(scope="app")
 
 
 def try_unlock_record(record, entered_pin):
@@ -602,7 +605,7 @@ def try_unlock_record(record, entered_pin):
 def enter_pin_digit(digit, record):
     current_pin = st.session_state.pin_keypad_value
     if len(current_pin) >= 8:
-        return
+        return False
 
     entered_pin = f"{current_pin}{digit}"
     st.session_state.pin_keypad_value = entered_pin
@@ -613,6 +616,7 @@ def enter_pin_digit(digit, record):
 
     if verify_pin(entered_pin, pin_protection):
         complete_pin_unlock(record, entered_pin, pin_protection)
+        return True
     elif (
         isinstance(expected_length, int)
         and 4 <= expected_length <= 8
@@ -620,6 +624,8 @@ def enter_pin_digit(digit, record):
     ) or len(entered_pin) >= 8:
         st.session_state.pin_keypad_value = ""
         st.session_state.pin_keypad_error = "PIN 錯誤，請再試一次。"
+
+    return False
 
 
 def remove_pin_digit():
@@ -635,9 +641,9 @@ def confirm_keypad_pin(record):
 
     if not valid:
         st.session_state.pin_keypad_error = pin_error
-        return
+        return False
 
-    try_unlock_record(record, entered_pin)
+    return try_unlock_record(record, entered_pin)
 
 
 @st.dialog(
@@ -686,48 +692,59 @@ def show_pin_keypad(record):
         st.error(st.session_state.pin_keypad_error)
 
     keypad_grid = st.container(key="pin_keypad_grid")
+    clicked_digit = None
 
     for row in (("1", "2", "3"), ("4", "5", "6"), ("7", "8", "9")):
         columns = keypad_grid.columns(3)
         for column, digit in zip(columns, row):
-            column.button(
+            if column.button(
                 digit,
                 key=f"pin_key_{record['id']}_{digit}",
-                width="stretch",
-                on_click=enter_pin_digit,
-                args=(digit, record)
-            )
+                width="stretch"
+            ):
+                clicked_digit = digit
 
     backspace_column, zero_column, confirm_column = keypad_grid.columns(3)
-    backspace_column.button(
+    backspace_clicked = backspace_column.button(
         "⌫",
         key=f"pin_key_{record['id']}_backspace",
         width="stretch",
-        on_click=remove_pin_digit,
         disabled=entered_length == 0
     )
-    zero_column.button(
+    if zero_column.button(
         "0",
         key=f"pin_key_{record['id']}_0",
-        width="stretch",
-        on_click=enter_pin_digit,
-        args=("0", record)
-    )
-    confirm_column.button(
+        width="stretch"
+    ):
+        clicked_digit = "0"
+    confirm_clicked = confirm_column.button(
         "✓",
         key=f"pin_key_{record['id']}_confirm",
         type="primary",
-        width="stretch",
-        on_click=confirm_keypad_pin,
-        args=(record,)
+        width="stretch"
     )
 
-    st.button(
+    cancel_clicked = st.button(
         "取消",
         key=f"pin_key_{record['id']}_cancel",
-        width="stretch",
-        on_click=close_pin_prompt
+        width="stretch"
     )
+
+    if clicked_digit is not None:
+        unlocked = enter_pin_digit(clicked_digit, record)
+        st.rerun(scope="app" if unlocked else "fragment")
+
+    if backspace_clicked:
+        remove_pin_digit()
+        st.rerun(scope="fragment")
+
+    if confirm_clicked:
+        unlocked = confirm_keypad_pin(record)
+        st.rerun(scope="app" if unlocked else "fragment")
+
+    if cancel_clicked:
+        close_pin_prompt()
+        st.rerun(scope="app")
 
 
 def apply_result_edits(ranking, edited_data):
@@ -1392,6 +1409,11 @@ if st.session_state.pop("collapse_sidebar_requested", False):
         width=1,
         height=1
     )
+
+
+pin_unlock_message = st.session_state.pop("pin_unlock_message", None)
+if pin_unlock_message:
+    st.success(f"✅ {pin_unlock_message}")
 
 
 if st.session_state.pin_prompt_open:

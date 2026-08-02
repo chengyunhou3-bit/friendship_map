@@ -17,7 +17,7 @@ if str(APP_DIRECTORY) not in sys.path:
 from friendship import (
     load_results as load_local_results,
     normalize_scores,
-    save_results as save_local_results
+    save_data as save_local_data
 )
 from cloud_store import (
     delete_cloud_results,
@@ -25,6 +25,14 @@ from cloud_store import (
     save_cloud_results
 )
 from draggable_map import draggable_relationship_map
+from result_library import (
+    default_record_title,
+    delete_record as remove_record_from_library,
+    get_record,
+    normalize_library,
+    record_label,
+    upsert_record
+)
 from record_pin import (
     create_pin_protection,
     disabled_pin_protection,
@@ -136,19 +144,38 @@ def save_current_results(
     x_coordinates,
     y_coordinates
 ):
+    global result_library
+
+    if guest_mode_enabled():
+        return
+
+    result = build_result_data(
+        names,
+        familiarity_scores,
+        likability_scores,
+        x_coordinates,
+        y_coordinates,
+        st.session_state.display_settings,
+        st.session_state.pin_protection
+    )
+    result_library, record_id = upsert_record(
+        result_library,
+        st.session_state.current_record_id,
+        st.session_state.record_title,
+        result
+    )
+    persist_result_library(result_library)
+    st.session_state.current_record_id = record_id
+    st.session_state.selected_record_id = record_id
+    st.session_state.record_selector_pending = record_id
+
+
+def persist_result_library(library):
     if guest_mode_enabled():
         return
 
     if not cloud_mode_enabled():
-        save_local_results(
-            names,
-            familiarity_scores,
-            likability_scores,
-            x_coordinates,
-            y_coordinates,
-            display_settings=st.session_state.display_settings,
-            pin_protection=st.session_state.pin_protection
-        )
+        save_local_data(library)
         return
 
     url, service_key = cloud_credentials()
@@ -156,42 +183,27 @@ def save_current_results(
         url,
         service_key,
         current_owner_id(),
-        build_result_data(
-            names,
-            familiarity_scores,
-            likability_scores,
-            x_coordinates,
-            y_coordinates,
-            st.session_state.display_settings,
-            st.session_state.pin_protection
-        )
+        library
     )
 
 
-def save_pin_protection(saved_results, pin_protection):
-    updated_results = dict(saved_results)
-    updated_results["pin_protection"] = pin_protection
+def save_pin_protection(record, pin_protection):
+    global result_library
 
-    if not cloud_mode_enabled():
-        save_local_results(
-            updated_results["names"],
-            updated_results["familiarity_scores"],
-            updated_results["likability_scores"],
-            updated_results["x_coordinates"],
-            updated_results["y_coordinates"],
-            display_settings=updated_results.get("display_settings"),
-            pin_protection=pin_protection
-        )
-    else:
-        url, service_key = cloud_credentials()
-        save_cloud_results(
-            url,
-            service_key,
-            current_owner_id(),
-            updated_results
-        )
+    updated_result = dict(record["result"])
+    updated_result["pin_protection"] = pin_protection
+    record["result"] = updated_result
+    result_library, record_id = upsert_record(
+        result_library,
+        record["id"],
+        record["title"],
+        updated_result
+    )
+    persist_result_library(result_library)
 
     st.session_state.pin_protection = pin_protection
+    st.session_state.current_record_id = record_id
+    st.session_state.selected_record_id = record_id
 
 
 def load_current_results():
@@ -214,6 +226,7 @@ def delete_current_results():
         return
 
     if not cloud_mode_enabled():
+        persist_result_library(normalize_library(None))
         return
 
     url, service_key = cloud_credentials()
@@ -222,6 +235,16 @@ def delete_current_results():
         service_key,
         current_owner_id()
     )
+
+
+def delete_saved_record(record_id):
+    global result_library
+
+    result_library = remove_record_from_library(
+        result_library,
+        record_id
+    )
+    persist_result_library(result_library)
 
 
 def initialize_state():
@@ -236,6 +259,11 @@ def initialize_state():
         "display_settings_loaded": False,
         "pin_protection": None,
         "pin_prompt_open": False,
+        "current_record_id": None,
+        "selected_record_id": None,
+        "record_selector": None,
+        "record_selector_pending": None,
+        "record_title": "",
         "comparison_mode": "initial",
         "new_names": [],
         "editor_version": 0,
@@ -318,8 +346,14 @@ def make_current_pairs():
     return make_pairs(st.session_state.names)
 
 
-def start_comparison(names):
+def start_comparison(names, record_title):
     st.session_state.names = names
+    st.session_state.current_record_id = None
+    st.session_state.record_title = (
+        str(record_title).strip()[:80]
+        or default_record_title()
+    )
+    st.session_state.pin_protection = None
     st.session_state.familiarity_scores = {
         name: 0 for name in names
     }
@@ -454,7 +488,8 @@ def undo_last_answer():
     st.session_state.new_names = answer["new_names"]
 
 
-def load_saved_into_state(saved_results):
+def load_saved_into_state(record):
+    saved_results = record["result"]
     st.session_state.names = saved_results["names"]
     st.session_state.familiarity_scores = saved_results[
         "familiarity_scores"
@@ -467,6 +502,10 @@ def load_saved_into_state(saved_results):
     st.session_state.display_settings = normalized_display_settings(
         saved_results.get("display_settings")
     )
+    st.session_state.current_record_id = record["id"]
+    st.session_state.selected_record_id = record["id"]
+    st.session_state.record_title = record["title"]
+    st.session_state.pin_protection = saved_results.get("pin_protection")
     st.session_state.comparison_mode = "initial"
     st.session_state.new_names = []
     st.session_state.pairs = []
@@ -644,20 +683,37 @@ if (
 initialize_state()
 
 try:
-    saved_results = load_current_results()
+    stored_results = load_current_results()
 except Exception as error:
     st.error("目前無法連接私人資料庫，請稍後再試。")
     st.exception(error)
     st.stop()
 
-if saved_results is not None and st.session_state.pin_protection is None:
-    st.session_state.pin_protection = saved_results.get("pin_protection")
+result_library = normalize_library(stored_results)
+saved_records = result_library["records"]
+saved_record_ids = [record["id"] for record in saved_records]
+
+if st.session_state.selected_record_id not in saved_record_ids:
+    st.session_state.selected_record_id = (
+        saved_record_ids[0] if saved_record_ids else None
+    )
+
+pending_record_selector = st.session_state.pop(
+    "record_selector_pending",
+    None
+)
+
+if pending_record_selector in saved_record_ids:
+    st.session_state.record_selector = pending_record_selector
+elif st.session_state.record_selector not in saved_record_ids:
+    st.session_state.record_selector = st.session_state.selected_record_id
+
+selected_record = get_record(
+    result_library,
+    st.session_state.selected_record_id
+)
 
 if not st.session_state.display_settings_loaded:
-    if saved_results is not None:
-        st.session_state.display_settings = normalized_display_settings(
-            saved_results.get("display_settings")
-        )
     st.session_state.display_settings_loaded = True
 
 title_column, settings_column = st.columns(
@@ -761,18 +817,38 @@ with st.sidebar:
         if display_name:
             st.caption(f"已登入：{display_name}")
 
-    if saved_results is not None:
+    if saved_records:
+        record_by_id = {
+            record["id"]: record for record in saved_records
+        }
+        st.selectbox(
+            "已保存紀錄",
+            options=saved_record_ids,
+            format_func=lambda record_id: record_label(
+                record_by_id[record_id]
+            ),
+            key="record_selector"
+        )
+        st.session_state.selected_record_id = (
+            st.session_state.record_selector
+        )
+        selected_record = get_record(
+            result_library,
+            st.session_state.selected_record_id
+        )
+
         if not st.session_state.pin_prompt_open:
-            if st.button("載入上次結果", width="stretch"):
+            if st.button("檢視選取紀錄", width="stretch"):
                 if pin_protection_is_disabled(
-                    saved_results.get("pin_protection")
+                    selected_record["result"].get("pin_protection")
                 ):
-                    load_saved_into_state(saved_results)
+                    load_saved_into_state(selected_record)
                 else:
                     st.session_state.pin_prompt_open = True
                 st.rerun()
         else:
-            pin_protection = saved_results.get("pin_protection")
+            selected_results = selected_record["result"]
+            pin_protection = selected_results.get("pin_protection")
 
             if not pin_protection_is_enabled(pin_protection):
                 st.info("是否要替這份紀錄加上 PIN 保護？")
@@ -809,10 +885,10 @@ with st.sidebar:
                     if pin_choice == "不使用 PIN":
                         pin_protection = disabled_pin_protection()
                         save_pin_protection(
-                            saved_results,
+                            selected_record,
                             pin_protection
                         )
-                        load_saved_into_state(saved_results)
+                        load_saved_into_state(selected_record)
                         st.session_state.pin_prompt_open = False
                         st.rerun()
                     else:
@@ -825,10 +901,10 @@ with st.sidebar:
                         else:
                             pin_protection = create_pin_protection(new_pin)
                             save_pin_protection(
-                                saved_results,
+                                selected_record,
                                 pin_protection
                             )
-                            load_saved_into_state(saved_results)
+                            load_saved_into_state(selected_record)
                             st.session_state.pin_prompt_open = False
                             st.rerun()
             else:
@@ -846,7 +922,7 @@ with st.sidebar:
 
                 if unlock_results:
                     if verify_pin(entered_pin, pin_protection):
-                        load_saved_into_state(saved_results)
+                        load_saved_into_state(selected_record)
                         st.session_state.pin_prompt_open = False
                         st.rerun()
                     else:
@@ -864,13 +940,20 @@ with st.sidebar:
         reset_app()
         st.rerun()
 
+    active_record = get_record(
+        result_library,
+        st.session_state.current_record_id
+    )
+
     if (
-        saved_results is not None
+        active_record is not None
         and not guest_mode_enabled()
         and st.session_state.stage == "results"
     ):
         with st.expander("紀錄 PIN 設定"):
-            current_pin_protection = saved_results.get("pin_protection")
+            current_pin_protection = active_record["result"].get(
+                "pin_protection"
+            )
 
             if pin_protection_is_enabled(current_pin_protection):
                 st.caption("目前已啟用 PIN 保護。")
@@ -885,7 +968,7 @@ with st.sidebar:
                     width="stretch"
                 ):
                     save_pin_protection(
-                        saved_results,
+                        active_record,
                         disabled_pin_protection()
                     )
                     st.rerun()
@@ -918,10 +1001,26 @@ with st.sidebar:
                         st.error("兩次輸入的 PIN 不一致。")
                     else:
                         save_pin_protection(
-                            saved_results,
+                            active_record,
                             create_pin_protection(settings_pin)
                         )
                         st.rerun()
+
+    if selected_record is not None and not guest_mode_enabled():
+        with st.expander("管理選取紀錄"):
+            st.caption(record_label(selected_record))
+            confirm_delete_record = st.checkbox(
+                "我確定要刪除這份紀錄"
+            )
+
+            if st.button(
+                "刪除選取紀錄",
+                disabled=not confirm_delete_record,
+                width="stretch"
+            ):
+                delete_saved_record(selected_record["id"])
+                reset_app()
+                st.rerun()
 
     if guest_mode_enabled():
         st.divider()
@@ -956,6 +1055,11 @@ with st.sidebar:
 
 if st.session_state.stage == "names":
     st.subheader("1. 輸入朋友名單")
+    record_title_input = st.text_input(
+        "這份紀錄名稱（選填）",
+        max_chars=80,
+        placeholder="例如：大學朋友"
+    )
     raw_names = st.text_area(
         "一行一個名字，也可以用逗號分隔",
         height=180,
@@ -968,7 +1072,7 @@ if st.session_state.stage == "names":
         if len(names) < 2:
             st.error("至少需要兩個不同的名字。")
         else:
-            start_comparison(names)
+            start_comparison(names, record_title_input)
             st.rerun()
 
 

@@ -4,6 +4,13 @@ import random
 from datetime import datetime
 from pathlib import Path
 
+from result_library import (
+    default_record_title,
+    normalize_library,
+    record_label,
+    upsert_record
+)
+
 try:
     import matplotlib.pyplot as plt
 except ModuleNotFoundError:
@@ -142,6 +149,13 @@ def draw_map(names, x_coordinates, y_coordinates):
     plt.show()
 
 
+def save_data(data):
+    with RESULTS_FILE.open("w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=2)
+
+    print(f"\n結果已保存到：{RESULTS_FILE}")
+
+
 def save_results(
     names,
     familiarity_scores,
@@ -166,10 +180,14 @@ def save_results(
     if pin_protection is not None:
         data["pin_protection"] = pin_protection
 
-    with RESULTS_FILE.open("w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=2)
-
-    print(f"\n結果已保存到：{RESULTS_FILE}")
+    library = normalize_library(load_results())
+    library, _ = upsert_record(
+        library,
+        None,
+        default_record_title(data),
+        data
+    )
+    save_data(library)
 
 
 def load_results():
@@ -194,23 +212,32 @@ def show_coordinates(names, x_coordinates, y_coordinates):
 
 
 def main():
-    saved_results = load_results()
+    stored_results = load_results()
+    library = normalize_library(stored_results)
+    records = library["records"]
+    saved_results = None
     use_saved_results = False
 
-    if saved_results is not None:
+    if records:
+        print("\n已保存的紀錄：")
+
+        for index, record in enumerate(records, start=1):
+            print(f"{index}. {record_label(record)}")
+
         while True:
             choice = input(
-                "找到上次的結果，要直接查看嗎？(y/n)："
-            ).strip().lower()
+                "輸入紀錄編號查看，或輸入 n 建立新紀錄："
+            ).strip()
 
-            if choice in ["y", "yes"]:
+            if choice.lower() in ["n", "no"]:
+                break
+
+            if choice.isdigit() and 1 <= int(choice) <= len(records):
+                saved_results = records[int(choice) - 1]["result"]
                 use_saved_results = True
                 break
 
-            if choice in ["n", "no"]:
-                break
-
-            print("請輸入 y 或 n")
+            print("請輸入清單中的紀錄編號，或輸入 n")
 
     if use_saved_results:
         names = saved_results["names"]

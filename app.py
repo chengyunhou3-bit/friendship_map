@@ -247,6 +247,35 @@ def delete_saved_record(record_id):
     persist_result_library(result_library)
 
 
+def rename_saved_record(record_id, new_title):
+    global result_library
+
+    record = get_record(result_library, record_id)
+
+    if record is None:
+        return False
+
+    clean_title = str(new_title).strip()[:80]
+
+    if not clean_title:
+        return False
+
+    result_library, _ = upsert_record(
+        result_library,
+        record_id,
+        clean_title,
+        record["result"]
+    )
+    persist_result_library(result_library)
+
+    if st.session_state.current_record_id == record_id:
+        st.session_state.record_title = clean_title
+
+    st.session_state.selected_record_id = record_id
+    st.session_state.record_selector_pending = record_id
+    return True
+
+
 def initialize_state():
     defaults = {
         "stage": "names",
@@ -1009,6 +1038,32 @@ with st.sidebar:
     if selected_record is not None and not guest_mode_enabled():
         with st.expander("管理選取紀錄"):
             st.caption(record_label(selected_record))
+
+            with st.form(
+                f"rename_record_form_{selected_record['id']}"
+            ):
+                renamed_record_title = st.text_input(
+                    "紀錄名稱",
+                    value=selected_record["title"],
+                    max_chars=80,
+                    key=f"rename_record_title_{selected_record['id']}"
+                )
+                rename_record = st.form_submit_button(
+                    "更改紀錄名稱",
+                    type="primary",
+                    width="stretch"
+                )
+
+            if rename_record:
+                if rename_saved_record(
+                    selected_record["id"],
+                    renamed_record_title
+                ):
+                    st.rerun()
+                else:
+                    st.error("紀錄名稱不能留白。")
+
+            st.divider()
             confirm_delete_record = st.checkbox(
                 "我確定要刪除這份紀錄"
             )

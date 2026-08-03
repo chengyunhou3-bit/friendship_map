@@ -72,16 +72,6 @@ def normalized_display_settings(settings=None):
     return normalized
 
 
-def axis_topic(axis_title, fallback):
-    topic = str(axis_title).strip()
-
-    for separator in ("：", ":", "←", "→", "↔"):
-        if separator in topic:
-            topic = topic.split(separator, 1)[0].strip()
-
-    return topic or fallback
-
-
 def display_record_label(record):
     label = record_label(record)
     pin_protection = record.get("result", {}).get("pin_protection")
@@ -1525,27 +1515,19 @@ elif st.session_state.stage in ["familiarity", "likability"]:
     )
 
     if st.session_state.stage == "familiarity":
-        comparison_topic = axis_topic(
-            st.session_state.display_settings["x_axis_title"],
-            "熟悉度"
-        )
         if is_incremental:
-            title = f"新增人物：{comparison_topic}比較"
+            title = "新增人物：熟悉度比較"
         else:
-            title = f"2. {comparison_topic}比較"
+            title = "2. 熟悉度比較"
 
         question = st.session_state.display_settings[
             "familiarity_question"
         ]
     else:
-        comparison_topic = axis_topic(
-            st.session_state.display_settings["y_axis_title"],
-            "好感度"
-        )
         if is_incremental:
-            title = f"新增人物：{comparison_topic}比較"
+            title = "新增人物：好感度比較"
         else:
-            title = f"3. {comparison_topic}比較"
+            title = "3. 好感度比較"
 
         question = st.session_state.display_settings[
             "likability_question"

@@ -480,19 +480,22 @@ def schedule_fast_question():
 
 
 def apply_fast_ranking_to_scores(stage):
-    """Convert the ordered tie groups into scores suitable for coordinates."""
+    """Infer the original all-pairs scores from a consistent ordered result."""
     groups = st.session_state.adaptive_groups
     scores = (
         st.session_state.familiarity_scores
         if stage == "familiarity"
         else st.session_state.likability_scores
     )
-    group_count = len(groups)
+    total_people = sum(len(group) for group in groups)
+    higher_count = 0
 
-    for position, group in enumerate(groups):
-        score = group_count - position - 1
+    for group in groups:
+        lower_count = total_people - higher_count - len(group)
+        score = lower_count - higher_count
         for name in group:
             scores[name] = score
+        higher_count += len(group)
 
 
 def fast_state_snapshot():
@@ -1626,7 +1629,7 @@ elif st.session_state.stage in ["familiarity", "likability"]:
     )
     st.progress(min((answered + 1) / estimated_max, 1.0))
     st.caption(
-        f"智慧快速模式 · 已回答 {answered} 題 · "
+        f"智慧比較 · 已回答 {answered} 題 · "
         f"此階段最多約 {estimated_max} 題"
     )
     st.markdown(f"### {question}")

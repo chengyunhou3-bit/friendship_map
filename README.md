@@ -37,6 +37,10 @@ python3 -m pip install -r college_pro_app/requirements.txt
 - Matplotlib：靜態座標圖
 - Streamlit Components v2：可拖曳座標圖
 
+靜態圖使用專案內附的 Noto Sans TC 字型，確保 Streamlit Cloud、
+電腦與手機都能正確顯示繁體中文。字型依 SIL Open Font License
+授權，授權文字位於 `static/OFL-NotoSansCJK.txt`。
+
 ## 啟動網站
 
 ### 方法一：VS Code 一鍵啟動

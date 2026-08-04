@@ -9,8 +9,11 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import streamlit as st
+from matplotlib import font_manager
 
 APP_DIRECTORY = Path(__file__).resolve().parent
+CHINESE_FONT_PATH = APP_DIRECTORY / "static" / "NotoSansTC-VF.otf"
+CHINESE_FONT = font_manager.FontProperties(fname=CHINESE_FONT_PATH)
 
 if str(APP_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(APP_DIRECTORY))
@@ -1012,7 +1015,6 @@ def apply_dragged_point():
 
 
 def make_figure():
-    plt.rcParams["font.family"] = "PingFang TC"
     plt.rcParams["axes.unicode_minus"] = False
 
     figure, axis = plt.subplots(figsize=(8, 8))
@@ -1028,15 +1030,25 @@ def make_figure():
             name,
             (x, y),
             xytext=(5, 5),
-            textcoords="offset points"
+            textcoords="offset points",
+            fontproperties=CHINESE_FONT
         )
 
     axis.set_xlim(-110, 110)
     axis.set_ylim(-110, 110)
     settings = st.session_state.display_settings
-    axis.set_xlabel(settings["x_axis_title"])
-    axis.set_ylabel(settings["y_axis_title"])
-    axis.set_title(settings["app_title"])
+    axis.set_xlabel(
+        settings["x_axis_title"],
+        fontproperties=CHINESE_FONT
+    )
+    axis.set_ylabel(
+        settings["y_axis_title"],
+        fontproperties=CHINESE_FONT
+    )
+    axis.set_title(
+        settings["app_title"],
+        fontproperties=CHINESE_FONT
+    )
     axis.grid(alpha=0.2)
 
     return figure

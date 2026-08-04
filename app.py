@@ -2,6 +2,7 @@ import math
 import random
 import re
 import sys
+from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
@@ -297,6 +298,14 @@ def initialize_state():
         "pairs": [],
         "question_index": 0,
         "answer_history": [],
+        "adaptive_groups": [],
+        "adaptive_pending": [],
+        "adaptive_candidate": None,
+        "adaptive_low": 0,
+        "adaptive_high": 0,
+        "adaptive_mid": None,
+        "stage_answer_count": 0,
+        "stage_question_max": 1,
         "guest_mode": False,
         "display_settings": normalized_display_settings(),
         "display_settings_loaded": False,
@@ -359,41 +368,142 @@ def parse_names(raw_names):
     return names
 
 
-def make_pairs(names):
-    pairs = []
+def estimated_fast_question_count(new_count, starting_count=1):
+    """Return a readable upper estimate for binary-insertion questions."""
+    total = 0
 
-    for i in range(len(names)):
-        for j in range(i + 1, len(names)):
-            pairs.append((names[i], names[j]))
+    for existing_count in range(starting_count, starting_count + new_count):
+        total += max(1, math.ceil(math.log2(existing_count + 1)))
 
-    random.shuffle(pairs)
-    return pairs
-
-
-def make_incremental_pairs(names, new_names):
-    new_name_set = set(new_names)
-    pairs = []
-
-    for i in range(len(names)):
-        for j in range(i + 1, len(names)):
-            person_a = names[i]
-            person_b = names[j]
-
-            if person_a in new_name_set or person_b in new_name_set:
-                pairs.append((person_a, person_b))
-
-    random.shuffle(pairs)
-    return pairs
+    return max(1, total)
 
 
-def make_current_pairs():
+def groups_from_coordinates(names, coordinates):
+    """Build descending tie groups from an existing saved coordinate axis."""
+    groups = []
+
+    for name in sorted(names, key=lambda item: coordinates[item], reverse=True):
+        value = coordinates[name]
+
+        if groups and coordinates[groups[-1][0]] == value:
+            groups[-1].append(name)
+        else:
+            groups.append([name])
+
+    return groups
+
+
+def begin_fast_stage(stage):
+    """Prepare one adaptive comparison stage and its first question."""
+    st.session_state.stage = stage
+    st.session_state.pairs = []
+    st.session_state.question_index = 0
+    st.session_state.stage_answer_count = 0
+
     if st.session_state.comparison_mode == "incremental":
-        return make_incremental_pairs(
-            st.session_state.names,
-            st.session_state.new_names
+        old_names = [
+            name for name in st.session_state.names
+            if name not in set(st.session_state.new_names)
+        ]
+        coordinates = (
+            st.session_state.x_coordinates
+            if stage == "familiarity"
+            else st.session_state.y_coordinates
+        )
+        st.session_state.adaptive_groups = groups_from_coordinates(
+            old_names,
+            coordinates
+        )
+        pending = list(st.session_state.new_names)
+        random.shuffle(pending)
+        st.session_state.adaptive_pending = pending
+        st.session_state.stage_question_max = estimated_fast_question_count(
+            len(pending),
+            max(1, len(st.session_state.adaptive_groups))
+        )
+    else:
+        pending = list(st.session_state.names)
+        random.shuffle(pending)
+        st.session_state.adaptive_groups = [[pending.pop()]]
+        st.session_state.adaptive_pending = pending
+        st.session_state.stage_question_max = estimated_fast_question_count(
+            len(pending)
         )
 
-    return make_pairs(st.session_state.names)
+    st.session_state.adaptive_candidate = None
+    st.session_state.adaptive_low = 0
+    st.session_state.adaptive_high = 0
+    st.session_state.adaptive_mid = None
+    schedule_fast_question()
+
+
+def schedule_fast_question():
+    """Append the next useful comparison, or finish the current stage."""
+    while st.session_state.adaptive_candidate is None:
+        if not st.session_state.adaptive_pending:
+            return False
+
+        st.session_state.adaptive_candidate = (
+            st.session_state.adaptive_pending.pop(0)
+        )
+        st.session_state.adaptive_low = 0
+        st.session_state.adaptive_high = len(
+            st.session_state.adaptive_groups
+        )
+
+        if st.session_state.adaptive_high == 0:
+            st.session_state.adaptive_groups.append(
+                [st.session_state.adaptive_candidate]
+            )
+            st.session_state.adaptive_candidate = None
+
+    low = st.session_state.adaptive_low
+    high = st.session_state.adaptive_high
+
+    if low >= high:
+        st.session_state.adaptive_groups.insert(
+            low,
+            [st.session_state.adaptive_candidate]
+        )
+        st.session_state.adaptive_candidate = None
+        return schedule_fast_question()
+
+    middle = (low + high) // 2
+    st.session_state.adaptive_mid = middle
+    st.session_state.pairs.append(
+        (
+            st.session_state.adaptive_candidate,
+            st.session_state.adaptive_groups[middle][0]
+        )
+    )
+    return True
+
+
+def apply_fast_ranking_to_scores(stage):
+    """Convert the ordered tie groups into scores suitable for coordinates."""
+    groups = st.session_state.adaptive_groups
+    scores = (
+        st.session_state.familiarity_scores
+        if stage == "familiarity"
+        else st.session_state.likability_scores
+    )
+    group_count = len(groups)
+
+    for position, group in enumerate(groups):
+        score = group_count - position - 1
+        for name in group:
+            scores[name] = score
+
+
+def fast_state_snapshot():
+    keys = (
+        "stage", "pairs", "question_index", "comparison_mode",
+        "new_names", "adaptive_groups", "adaptive_pending",
+        "adaptive_candidate", "adaptive_low", "adaptive_high",
+        "adaptive_mid", "stage_answer_count", "stage_question_max",
+        "familiarity_scores", "likability_scores"
+    )
+    return {key: deepcopy(st.session_state[key]) for key in keys}
 
 
 def start_comparison(names, record_title):
@@ -410,12 +520,10 @@ def start_comparison(names, record_title):
     st.session_state.likability_scores = {
         name: 0 for name in names
     }
-    st.session_state.pairs = make_pairs(names)
-    st.session_state.question_index = 0
     st.session_state.answer_history = []
     st.session_state.comparison_mode = "initial"
     st.session_state.new_names = []
-    st.session_state.stage = "familiarity"
+    begin_fast_stage("familiarity")
 
 
 def start_incremental_comparison(new_names):
@@ -427,10 +535,8 @@ def start_incremental_comparison(new_names):
         st.session_state.familiarity_scores[name] = 0
         st.session_state.likability_scores[name] = 0
 
-    st.session_state.pairs = make_current_pairs()
-    st.session_state.question_index = 0
     st.session_state.answer_history = []
-    st.session_state.stage = "familiarity"
+    begin_fast_stage("familiarity")
 
 
 def record_answer(result, expected_stage, expected_question_index):
@@ -451,40 +557,27 @@ def record_answer(result, expected_stage, expected_question_index):
 
     person_a, person_b = pairs[question_index]
 
-    st.session_state.answer_history.append(
-        {
-            "stage": stage,
-            "question_index": question_index,
-            "pairs": list(pairs),
-            "person_a": person_a,
-            "person_b": person_b,
-            "result": result,
-            "comparison_mode": st.session_state.comparison_mode,
-            "new_names": list(st.session_state.new_names)
-        }
-    )
+    st.session_state.answer_history.append(fast_state_snapshot())
 
-    if stage == "familiarity":
-        scores = st.session_state.familiarity_scores
-    else:
-        scores = st.session_state.likability_scores
-
+    middle = st.session_state.adaptive_mid
     if result == ">":
-        scores[person_a] += 1
-        scores[person_b] -= 1
+        st.session_state.adaptive_high = middle
     elif result == "<":
-        scores[person_a] -= 1
-        scores[person_b] += 1
+        st.session_state.adaptive_low = middle + 1
+    else:
+        st.session_state.adaptive_groups[middle].append(person_a)
+        st.session_state.adaptive_candidate = None
 
     st.session_state.question_index += 1
+    st.session_state.stage_answer_count += 1
 
-    if st.session_state.question_index < len(st.session_state.pairs):
+    if schedule_fast_question():
         return
 
+    apply_fast_ranking_to_scores(stage)
+
     if stage == "familiarity":
-        st.session_state.stage = "likability"
-        st.session_state.pairs = make_current_pairs()
-        st.session_state.question_index = 0
+        begin_fast_stage("likability")
         return
 
     st.session_state.x_coordinates = normalize_scores(
@@ -513,29 +606,9 @@ def undo_last_answer():
     if not st.session_state.answer_history:
         return
 
-    answer = st.session_state.answer_history.pop()
-    stage = answer["stage"]
-    person_a = answer["person_a"]
-    person_b = answer["person_b"]
-    result = answer["result"]
-
-    if stage == "familiarity":
-        scores = st.session_state.familiarity_scores
-    else:
-        scores = st.session_state.likability_scores
-
-    if result == ">":
-        scores[person_a] -= 1
-        scores[person_b] += 1
-    elif result == "<":
-        scores[person_a] += 1
-        scores[person_b] -= 1
-
-    st.session_state.stage = stage
-    st.session_state.question_index = answer["question_index"]
-    st.session_state.pairs = answer["pairs"]
-    st.session_state.comparison_mode = answer["comparison_mode"]
-    st.session_state.new_names = answer["new_names"]
+    snapshot = st.session_state.answer_history.pop()
+    for key, value in snapshot.items():
+        st.session_state[key] = value
 
 
 def load_saved_into_state(record):
@@ -1507,7 +1580,6 @@ if st.session_state.stage == "names":
 
 elif st.session_state.stage in ["familiarity", "likability"]:
     question_index = st.session_state.question_index
-    total_questions = len(st.session_state.pairs)
     person_a, person_b = st.session_state.pairs[question_index]
 
     is_incremental = (
@@ -1547,8 +1619,16 @@ elif st.session_state.stage in ["familiarity", "likability"]:
             "只會比較包含新人物的組合，舊人物彼此不用重選。"
         )
 
-    st.progress((question_index + 1) / total_questions)
-    st.caption(f"第 {question_index + 1} / {total_questions} 題")
+    answered = st.session_state.stage_answer_count
+    estimated_max = max(
+        answered + 1,
+        st.session_state.stage_question_max
+    )
+    st.progress(min((answered + 1) / estimated_max, 1.0))
+    st.caption(
+        f"智慧快速模式 · 已回答 {answered} 題 · "
+        f"此階段最多約 {estimated_max} 題"
+    )
     st.markdown(f"### {question}")
 
     left, middle, right = st.columns(3)

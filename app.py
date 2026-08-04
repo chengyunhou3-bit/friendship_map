@@ -12,11 +12,9 @@ import streamlit as st
 from matplotlib import font_manager
 
 APP_DIRECTORY = Path(__file__).resolve().parent
-CHINESE_FONT_PATH = APP_DIRECTORY / "static" / "NotoSansTC-VF.otf"
-CHINESE_FONT = font_manager.FontProperties(
-    fname=CHINESE_FONT_PATH,
-    weight="semibold"
-)
+CHINESE_FONT_PATH = APP_DIRECTORY / "static" / "NotoSansTC-ExtraBold.otf"
+CHINESE_FONT = font_manager.FontProperties(fname=CHINESE_FONT_PATH)
+STATIC_CHART_TEXT_COLOR = "#000000"
 
 if str(APP_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(APP_DIRECTORY))
@@ -1021,6 +1019,8 @@ def make_figure():
     plt.rcParams["axes.unicode_minus"] = False
 
     figure, axis = plt.subplots(figsize=(8, 8))
+    figure.patch.set_facecolor("white")
+    axis.set_facecolor("white")
     axis.axhline(0, color="gray", linewidth=1)
     axis.axvline(0, color="gray", linewidth=1)
 
@@ -1034,7 +1034,8 @@ def make_figure():
             (x, y),
             xytext=(5, 5),
             textcoords="offset points",
-            fontproperties=CHINESE_FONT
+            fontproperties=CHINESE_FONT,
+            color=STATIC_CHART_TEXT_COLOR
         )
 
     axis.set_xlim(-110, 110)
@@ -1042,16 +1043,22 @@ def make_figure():
     settings = st.session_state.display_settings
     axis.set_xlabel(
         settings["x_axis_title"],
-        fontproperties=CHINESE_FONT
+        fontproperties=CHINESE_FONT,
+        color=STATIC_CHART_TEXT_COLOR
     )
     axis.set_ylabel(
         settings["y_axis_title"],
-        fontproperties=CHINESE_FONT
+        fontproperties=CHINESE_FONT,
+        color=STATIC_CHART_TEXT_COLOR
     )
     axis.set_title(
         settings["app_title"],
-        fontproperties=CHINESE_FONT
+        fontproperties=CHINESE_FONT,
+        color=STATIC_CHART_TEXT_COLOR
     )
+    axis.tick_params(colors=STATIC_CHART_TEXT_COLOR)
+    for spine in axis.spines.values():
+        spine.set_color(STATIC_CHART_TEXT_COLOR)
     axis.grid(alpha=0.2)
 
     return figure

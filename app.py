@@ -13,7 +13,10 @@ from matplotlib import font_manager
 
 APP_DIRECTORY = Path(__file__).resolve().parent
 CHINESE_FONT_PATH = APP_DIRECTORY / "static" / "NotoSansTC-VF.otf"
-CHINESE_FONT = font_manager.FontProperties(fname=CHINESE_FONT_PATH)
+CHINESE_FONT = font_manager.FontProperties(
+    fname=CHINESE_FONT_PATH,
+    weight="semibold"
+)
 
 if str(APP_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(APP_DIRECTORY))

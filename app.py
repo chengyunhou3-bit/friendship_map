@@ -26,6 +26,7 @@ from cloud_store import (
     save_cloud_results
 )
 from draggable_map import draggable_relationship_map
+from comparison_keyboard import comparison_keyboard_listener
 from pin_keyboard import pin_keyboard_listener
 from sidebar_control import collapse_sidebar
 from result_library import (
@@ -315,6 +316,7 @@ def initialize_state():
         "pin_keypad_value": "",
         "pin_keypad_error": "",
         "pin_keyboard_event_id": None,
+        "comparison_keyboard_event_id": None,
         "pin_unlock_message": None,
         "collapse_sidebar_requested": False,
         "pin_settings_record_id": None,
@@ -734,6 +736,10 @@ def confirm_keypad_pin(record):
 
 
 def ignore_pin_keyboard_action():
+    pass
+
+
+def ignore_comparison_keyboard_action():
     pass
 
 
@@ -1634,6 +1640,34 @@ elif st.session_state.stage in ["familiarity", "likability"]:
     )
     st.markdown(f"### {question}")
 
+    keyboard_result = comparison_keyboard_listener(
+        key=f"comparison_keyboard_{st.session_state.stage}_{question_index}",
+        on_action_change=ignore_comparison_keyboard_action,
+        width="stretch",
+        height=44
+    )
+    keyboard_action = getattr(keyboard_result, "action", None)
+
+    if isinstance(keyboard_action, dict):
+        keyboard_event_id = keyboard_action.get("eventId")
+        keyboard_choice = keyboard_action.get("choice")
+
+        if (
+            keyboard_event_id
+            and keyboard_event_id
+            != st.session_state.comparison_keyboard_event_id
+            and keyboard_choice in (">", "=", "<")
+        ):
+            st.session_state.comparison_keyboard_event_id = (
+                keyboard_event_id
+            )
+            record_answer(
+                keyboard_choice,
+                st.session_state.stage,
+                question_index
+            )
+            st.rerun()
+
     left, middle, right = st.columns(3)
 
     with left:
@@ -1851,6 +1885,7 @@ elif st.session_state.stage == "results":
 
     draggable_relationship_map(
         data={
+            "title": st.session_state.display_settings["app_title"],
             "points": map_points,
             "axisTitles": {
                 "x": st.session_state.display_settings["x_axis_title"],

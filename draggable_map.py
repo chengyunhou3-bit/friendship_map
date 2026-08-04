@@ -9,7 +9,10 @@ COMPONENT_HTML = """
     role="img"
     aria-label="可拖曳的人際關係座標圖"
   >
-    <rect class="plot-background" x="70" y="30" width="580" height="520"></rect>
+    <text id="map-title" class="map-title" x="360" y="25" text-anchor="middle">
+      人際關係座標圖
+    </text>
+    <rect class="plot-background" x="70" y="42" width="580" height="508"></rect>
     <g id="grid-layer"></g>
     <g id="point-layer"></g>
     <text id="x-axis-title" class="axis-title" x="360" y="603" text-anchor="middle">
@@ -73,6 +76,7 @@ COMPONENT_CSS = """
 
 .tick-label,
 .axis-title,
+.map-title,
 .point-label {
   fill: var(--st-text-color);
   font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif;
@@ -85,6 +89,11 @@ COMPONENT_CSS = """
 .axis-title {
   font-size: 16px;
   font-weight: 600;
+}
+
+.map-title {
+  font-size: 18px;
+  font-weight: 650;
 }
 
 .person-point {
@@ -163,6 +172,7 @@ export default function(component) {
   const svg = parentElement.querySelector("#relationship-map");
   const gridLayer = parentElement.querySelector("#grid-layer");
   const pointLayer = parentElement.querySelector("#point-layer");
+  const mapTitle = parentElement.querySelector("#map-title");
   const xAxisTitle = parentElement.querySelector("#x-axis-title");
   const yAxisTitle = parentElement.querySelector("#y-axis-title");
   const saveButton = parentElement.querySelector("#save-coordinates");
@@ -171,12 +181,13 @@ export default function(component) {
 
   const left = 70;
   const right = 650;
-  const top = 30;
+  const top = 42;
   const bottom = 550;
   const plotWidth = right - left;
   const plotHeight = bottom - top;
   const ticks = [-100, -50, 0, 50, 100];
 
+  mapTitle.textContent = data?.title || "人際關係座標圖";
   xAxisTitle.textContent = data?.axisTitles?.x
     || "熟悉度：不熟 ← → 熟悉";
   yAxisTitle.textContent = data?.axisTitles?.y

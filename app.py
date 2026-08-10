@@ -119,7 +119,7 @@ def normalized_annotations(annotations=None):
         target_type = str(annotation.get("target_type", "")).strip()
         target_id = str(annotation.get("target_id", "")).strip()
         note = str(annotation.get("note", "")).strip()
-        if target_type not in {"quadrant", "friend"}:
+        if target_type not in {"quadrant", "friend", "custom"}:
             continue
         if not target_id or not note:
             continue
@@ -2111,7 +2111,7 @@ elif st.session_state.stage == "results":
 
     st.markdown("### 📝 備註與定義")
     st.caption(
-        "按表格下方的 ＋ 新增一列，選擇象限或朋友後填寫備註。"
+        "按表格下方的 ＋ 新增一列；對象可輸入象限、朋友或任何自訂文字。"
         "備註只會顯示在這裡，不會出現在圖表上。"
     )
 
@@ -2126,7 +2126,6 @@ elif st.session_state.stage == "results":
         f"朋友｜{name}": name
         for name in st.session_state.names
     }
-    target_options = [*quadrant_labels, *friend_labels]
     stored_annotations = normalized_annotations(
         st.session_state.annotations
     )
@@ -2142,7 +2141,7 @@ elif st.session_state.stage == "results":
                 ),
                 None
             )
-        else:
+        elif annotation["target_type"] == "friend":
             target_label = next(
                 (
                     label
@@ -2151,6 +2150,8 @@ elif st.session_state.stage == "results":
                 ),
                 None
             )
+        else:
+            target_label = annotation["target_id"]
 
         if target_label:
             annotation_rows.append(
@@ -2169,10 +2170,11 @@ elif st.session_state.stage == "results":
             hide_index=True,
             num_rows="dynamic",
             column_config={
-                "對象": st.column_config.SelectboxColumn(
+                "對象": st.column_config.TextColumn(
                     "對象",
-                    options=target_options,
-                    required=True
+                    required=True,
+                    max_chars=80,
+                    help="可輸入象限、朋友或任何自訂文字"
                 ),
                 "備註／定義": st.column_config.TextColumn(
                     "備註／定義",
@@ -2209,8 +2211,8 @@ elif st.session_state.stage == "results":
                 target_type = "friend"
                 target_id = friend_labels[target]
             else:
-                invalid_annotation = True
-                break
+                target_type = "custom"
+                target_id = target
 
             new_annotations.append(
                 {

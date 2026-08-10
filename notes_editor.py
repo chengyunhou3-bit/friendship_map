@@ -3,7 +3,7 @@ import streamlit as st
 
 COMPONENT_HTML = """
 <div class="notes-editor">
-  <div class="notes-header"><span></span><span>對象</span><span>備註／定義</span></div>
+  <div class="notes-header"><span class="order-heading" title="拖曳排序">↕</span><span>對象</span><span>備註／定義</span></div>
   <div id="notes-rows"></div>
   <button id="add-note" class="add-note" type="button" aria-label="新增一列">＋</button>
   <button id="save-notes" class="save-notes" type="button">保存備註</button>
@@ -28,7 +28,10 @@ COMPONENT_CSS = """
 .note-cell { padding:.35rem; min-width:0; }
 .note-cell + .note-cell { border-left:1px solid color-mix(in srgb,var(--st-text-color) 14%,transparent); }
 .drag-cell { display:flex; align-items:center; justify-content:center; border-right:1px solid color-mix(in srgb,var(--st-text-color) 14%,transparent); }
-.drag-handle { border:0; padding:.35rem; color:color-mix(in srgb,var(--st-text-color) 58%,transparent); background:transparent; font-size:1.15rem; cursor:grab; user-select:none; }
+.order-heading { display:flex; align-items:center; justify-content:center; padding:.45rem 0 !important; font-size:1rem; }
+.drag-handle { display:grid; grid-template-columns:repeat(2,.28rem); grid-template-rows:repeat(3,.28rem); gap:.18rem; align-content:center; justify-content:center; width:1.7rem; height:2rem; border:1px solid color-mix(in srgb,var(--st-text-color) 24%,transparent); border-radius:.4rem; padding:0; color:var(--st-text-color); background:var(--st-background-color); cursor:grab; user-select:none; box-shadow:0 1px 2px rgba(0,0,0,.12); }
+.grip-dot { display:block; width:.28rem; height:.28rem; border-radius:50%; background:currentColor; opacity:.7; }
+.drag-handle:hover { border-color:var(--st-primary-color); color:var(--st-primary-color); }
 .drag-handle:active { cursor:grabbing; }
 .note-row.dragging { opacity:.45; }
 .note-row.drag-over { outline:2px solid var(--st-primary-color); }
@@ -90,7 +93,9 @@ export default function(component) {
       const dragCell = make("div", "drag-cell");
       const dragHandle = make("button", "drag-handle");
       dragHandle.type = "button";
-      dragHandle.textContent = "≡";
+      for (let dotIndex = 0; dotIndex < 6; dotIndex += 1) {
+        dragHandle.appendChild(make("span", "grip-dot"));
+      }
       dragHandle.title = "拖曳調整順序";
       dragHandle.setAttribute("aria-label", "拖曳調整順序");
       dragHandle.draggable = true;

@@ -106,6 +106,35 @@ def normalized_quadrant_settings(settings=None):
     return normalized
 
 
+def normalized_annotations(annotations=None):
+    normalized = []
+
+    if not isinstance(annotations, list):
+        return normalized
+
+    for annotation in annotations:
+        if not isinstance(annotation, dict):
+            continue
+
+        target_type = str(annotation.get("target_type", "")).strip()
+        target_id = str(annotation.get("target_id", "")).strip()
+        note = str(annotation.get("note", "")).strip()
+        if target_type not in {"quadrant", "friend"}:
+            continue
+        if not target_id or not note:
+            continue
+
+        normalized.append(
+            {
+                "target_type": target_type,
+                "target_id": target_id[:80],
+                "note": note[:500]
+            }
+        )
+
+    return normalized
+
+
 def display_record_label(record):
     label = record_label(record)
     pin_protection = record.get("result", {}).get("pin_protection")
@@ -177,6 +206,9 @@ def build_result_data(
         "display_settings": normalized_display_settings(display_settings),
         "quadrant_settings": normalized_quadrant_settings(
             st.session_state.quadrant_settings
+        ),
+        "annotations": normalized_annotations(
+            st.session_state.annotations
         )
     }
 
@@ -345,6 +377,7 @@ def initialize_state():
         "guest_mode": False,
         "display_settings": normalized_display_settings(),
         "quadrant_settings": normalized_quadrant_settings(),
+        "annotations": [],
         "display_settings_loaded": False,
         "pin_protection": None,
         "pin_prompt_open": False,
@@ -669,6 +702,9 @@ def load_saved_into_state(record):
     st.session_state.quadrant_settings = normalized_quadrant_settings(
         saved_results.get("quadrant_settings")
     )
+    st.session_state.annotations = normalized_annotations(
+        saved_results.get("annotations")
+    )
     st.session_state.current_record_id = record["id"]
     st.session_state.selected_record_id = record["id"]
     st.session_state.record_title = record["title"]
@@ -981,6 +1017,20 @@ def apply_result_edits(ranking, edited_data):
         name: edited_coordinates[name][1]
         for name in st.session_state.names
     }
+    st.session_state.annotations = [
+        {
+            **annotation,
+            "target_id": rename_map.get(
+                annotation["target_id"],
+                annotation["target_id"]
+            )
+        }
+        if annotation["target_type"] == "friend"
+        else annotation
+        for annotation in normalized_annotations(
+            st.session_state.annotations
+        )
+    ]
 
     save_current_results(
         st.session_state.names,
@@ -2058,3 +2108,132 @@ elif st.session_state.stage == "results":
         figure = make_figure()
         st.pyplot(figure, width="stretch")
         plt.close(figure)
+
+    st.markdown("### 📝 備註與定義")
+    st.caption(
+        "按表格下方的 ＋ 新增一列，選擇象限或朋友後填寫備註。"
+        "備註只會顯示在這裡，不會出現在圖表上。"
+    )
+
+    quadrant_settings = normalized_quadrant_settings(
+        st.session_state.quadrant_settings
+    )
+    quadrant_labels = {
+        f"象限｜{setting['name']}": quadrant
+        for quadrant, setting in quadrant_settings.items()
+    }
+    friend_labels = {
+        f"朋友｜{name}": name
+        for name in st.session_state.names
+    }
+    target_options = [*quadrant_labels, *friend_labels]
+    stored_annotations = normalized_annotations(
+        st.session_state.annotations
+    )
+    annotation_rows = []
+
+    for annotation in stored_annotations:
+        if annotation["target_type"] == "quadrant":
+            target_label = next(
+                (
+                    label
+                    for label, quadrant in quadrant_labels.items()
+                    if quadrant == annotation["target_id"]
+                ),
+                None
+            )
+        else:
+            target_label = next(
+                (
+                    label
+                    for label, friend in friend_labels.items()
+                    if friend == annotation["target_id"]
+                ),
+                None
+            )
+
+        if target_label:
+            annotation_rows.append(
+                {"對象": target_label, "備註／定義": annotation["note"]}
+            )
+
+    annotation_editor_data = annotation_rows or {
+        "對象": [],
+        "備註／定義": []
+    }
+
+    with st.form("annotations_form"):
+        edited_annotations = st.data_editor(
+            annotation_editor_data,
+            key=f"annotations_editor_{st.session_state.editor_version}",
+            width="stretch",
+            hide_index=True,
+            num_rows="dynamic",
+            column_config={
+                "對象": st.column_config.SelectboxColumn(
+                    "對象",
+                    options=target_options,
+                    required=True
+                ),
+                "備註／定義": st.column_config.TextColumn(
+                    "備註／定義",
+                    required=True,
+                    max_chars=500
+                )
+            }
+        )
+        save_annotations = st.form_submit_button(
+            "保存備註",
+            type="primary",
+            width="stretch"
+        )
+
+    if save_annotations:
+        if hasattr(edited_annotations, "to_dict"):
+            edited_annotation_rows = edited_annotations.to_dict("records")
+        else:
+            edited_annotation_rows = list(edited_annotations)
+
+        new_annotations = []
+        invalid_annotation = False
+        for row in edited_annotation_rows:
+            target = str(row.get("對象", "")).strip()
+            note = str(row.get("備註／定義", "")).strip()
+            if not target or not note:
+                invalid_annotation = True
+                break
+
+            if target in quadrant_labels:
+                target_type = "quadrant"
+                target_id = quadrant_labels[target]
+            elif target in friend_labels:
+                target_type = "friend"
+                target_id = friend_labels[target]
+            else:
+                invalid_annotation = True
+                break
+
+            new_annotations.append(
+                {
+                    "target_type": target_type,
+                    "target_id": target_id,
+                    "note": note
+                }
+            )
+
+        if invalid_annotation:
+            st.error("每一列都需要選擇對象並填寫備註。")
+        else:
+            st.session_state.annotations = normalized_annotations(
+                new_annotations
+            )
+            save_current_results(
+                st.session_state.names,
+                st.session_state.familiarity_scores,
+                st.session_state.likability_scores,
+                st.session_state.x_coordinates,
+                st.session_state.y_coordinates
+            )
+            st.session_state.editor_version += 1
+            st.toast("備註已保存。", icon="✅")
+            st.rerun()

@@ -3,23 +3,35 @@ import streamlit as st
 
 COMPONENT_HTML = """
 <div class="notes-editor">
-  <div class="notes-header"><span>對象</span><span>備註／定義</span></div>
+  <div class="notes-header"><span></span><span>對象</span><span>備註／定義</span></div>
   <div id="notes-rows"></div>
   <button id="add-note" class="add-note" type="button" aria-label="新增一列">＋</button>
   <button id="save-notes" class="save-notes" type="button">保存備註</button>
   <span id="notes-status" class="notes-status"></span>
+  <dialog id="delete-dialog" class="delete-dialog">
+    <p>確定要刪除這一列備註嗎？</p>
+    <div class="dialog-actions">
+      <button id="cancel-delete" type="button">取消</button>
+      <button id="confirm-delete" class="confirm-delete" type="button">刪除</button>
+    </div>
+  </dialog>
 </div>
 """
 
 
 COMPONENT_CSS = """
 .notes-editor { width:100%; height:100%; overflow-y:auto; box-sizing:border-box; padding-left:.85rem; font-family:var(--st-font); }
-.notes-header, .note-row { display:grid; grid-template-columns:minmax(10rem, .8fr) minmax(14rem, 1.4fr); }
+.notes-header, .note-row { display:grid; grid-template-columns:2.25rem minmax(10rem, .8fr) minmax(14rem, 1.4fr); }
 .notes-header { color:color-mix(in srgb,var(--st-text-color) 72%,transparent); font-size:.86rem; font-weight:650; }
 .notes-header span { padding:.45rem .7rem; }
 .note-row { position:relative; margin-bottom:.4rem; border:1px solid color-mix(in srgb,var(--st-text-color) 18%,transparent); border-radius:.55rem; background:var(--st-secondary-background-color); }
 .note-cell { padding:.35rem; min-width:0; }
 .note-cell + .note-cell { border-left:1px solid color-mix(in srgb,var(--st-text-color) 14%,transparent); }
+.drag-cell { display:flex; align-items:center; justify-content:center; border-right:1px solid color-mix(in srgb,var(--st-text-color) 14%,transparent); }
+.drag-handle { border:0; padding:.35rem; color:color-mix(in srgb,var(--st-text-color) 58%,transparent); background:transparent; font-size:1.15rem; cursor:grab; user-select:none; }
+.drag-handle:active { cursor:grabbing; }
+.note-row.dragging { opacity:.45; }
+.note-row.drag-over { outline:2px solid var(--st-primary-color); }
 select, input { width:100%; min-height:2.45rem; box-sizing:border-box; border:0; border-radius:.35rem; padding:.45rem .55rem; color:var(--st-text-color); background:var(--st-background-color); font:inherit; }
 select:focus, input:focus { outline:2px solid var(--st-primary-color); }
 .custom-wrap { display:flex; gap:.3rem; }
@@ -30,7 +42,13 @@ select:focus, input:focus { outline:2px solid var(--st-primary-color); }
 .save-notes { width:100%; margin-top:.75rem; min-height:2.6rem; border:0; border-radius:.5rem; color:white; background:var(--st-primary-color); font:inherit; font-weight:650; cursor:pointer; }
 .notes-status { display:block; min-height:1.3rem; margin-top:.35rem; font-size:.88rem; }
 .notes-status.error { color:#ff6b6b; }
-@media (max-width:560px) { .notes-header { display:none; } .note-row { grid-template-columns:1fr; } .note-cell + .note-cell { border-left:0; border-top:1px solid color-mix(in srgb,var(--st-text-color) 14%,transparent); } }
+.delete-dialog { width:min(22rem,calc(100% - 2rem)); border:1px solid color-mix(in srgb,var(--st-text-color) 22%,transparent); border-radius:.75rem; padding:1.1rem; color:var(--st-text-color); background:var(--st-background-color); box-shadow:0 12px 38px rgba(0,0,0,.35); }
+.delete-dialog::backdrop { background:rgba(0,0,0,.5); }
+.delete-dialog p { margin:.1rem 0 1rem; }
+.dialog-actions { display:flex; justify-content:flex-end; gap:.55rem; }
+.dialog-actions button { border:1px solid color-mix(in srgb,var(--st-text-color) 22%,transparent); border-radius:.45rem; padding:.45rem .85rem; color:var(--st-text-color); background:var(--st-secondary-background-color); font:inherit; cursor:pointer; }
+.dialog-actions .confirm-delete { border-color:#d9534f; color:white; background:#d9534f; }
+@media (max-width:560px) { .notes-header { display:none; } .note-row { grid-template-columns:2.25rem 1fr; } .drag-cell { grid-row:1 / span 2; } .note-cell + .note-cell { border-left:0; border-top:1px solid color-mix(in srgb,var(--st-text-color) 14%,transparent); } }
 """
 
 
@@ -41,8 +59,13 @@ export default function(component) {
   const addButton = parentElement.querySelector("#add-note");
   const saveButton = parentElement.querySelector("#save-notes");
   const status = parentElement.querySelector("#notes-status");
+  const deleteDialog = parentElement.querySelector("#delete-dialog");
+  const cancelDelete = parentElement.querySelector("#cancel-delete");
+  const confirmDelete = parentElement.querySelector("#confirm-delete");
   const options = Array.isArray(data?.options) ? data.options : [];
   let rows = (Array.isArray(data?.rows) ? data.rows : []).map((row) => ({...row}));
+  let pendingDeleteIndex = null;
+  let draggedIndex = null;
 
   const make = (tag, className) => {
     const element = document.createElement(tag);
@@ -58,8 +81,48 @@ export default function(component) {
       remove.type = "button";
       remove.textContent = "−";
       remove.setAttribute("aria-label", "刪除此列");
-      remove.onclick = () => { rows.splice(index, 1); render(); };
+      remove.onclick = () => {
+        pendingDeleteIndex = index;
+        deleteDialog.showModal();
+      };
       rowElement.appendChild(remove);
+
+      const dragCell = make("div", "drag-cell");
+      const dragHandle = make("button", "drag-handle");
+      dragHandle.type = "button";
+      dragHandle.textContent = "≡";
+      dragHandle.title = "拖曳調整順序";
+      dragHandle.setAttribute("aria-label", "拖曳調整順序");
+      dragHandle.draggable = true;
+      dragHandle.ondragstart = (event) => {
+        draggedIndex = index;
+        rowElement.classList.add("dragging");
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(index));
+      };
+      dragHandle.ondragend = () => {
+        draggedIndex = null;
+        rowElement.classList.remove("dragging");
+        parentElement.querySelectorAll(".drag-over").forEach((item) => item.classList.remove("drag-over"));
+      };
+      dragCell.appendChild(dragHandle);
+      rowElement.appendChild(dragCell);
+      rowElement.ondragover = (event) => {
+        if (draggedIndex === null || draggedIndex === index) return;
+        event.preventDefault();
+        rowElement.classList.add("drag-over");
+      };
+      rowElement.ondragleave = () => rowElement.classList.remove("drag-over");
+      rowElement.ondrop = (event) => {
+        event.preventDefault();
+        rowElement.classList.remove("drag-over");
+        if (draggedIndex === null || draggedIndex === index) return;
+        const [movedRow] = rows.splice(draggedIndex, 1);
+        const destination = draggedIndex < index ? index - 1 : index;
+        rows.splice(destination, 0, movedRow);
+        draggedIndex = null;
+        render();
+      };
 
       const targetCell = make("div", "note-cell");
       if (row.mode === "custom") {
@@ -118,6 +181,16 @@ export default function(component) {
   };
 
   addButton.onclick = () => { rows.push({mode:"option", target:"", custom:"", note:""}); render(); };
+  cancelDelete.onclick = () => {
+    pendingDeleteIndex = null;
+    deleteDialog.close();
+  };
+  confirmDelete.onclick = () => {
+    if (pendingDeleteIndex !== null) rows.splice(pendingDeleteIndex, 1);
+    pendingDeleteIndex = null;
+    deleteDialog.close();
+    render();
+  };
   saveButton.onclick = () => {
     const cleaned = rows.filter((row) => row.target || row.custom || row.note);
     const invalid = cleaned.some((row) => !(row.note || "").trim() || (row.mode === "custom" ? !(row.custom || "").trim() : !row.target));
@@ -133,7 +206,12 @@ export default function(component) {
     render();
   };
   render();
-  return () => { addButton.onclick = null; saveButton.onclick = null; };
+  return () => {
+    addButton.onclick = null;
+    saveButton.onclick = null;
+    cancelDelete.onclick = null;
+    confirmDelete.onclick = null;
+  };
 }
 """
 

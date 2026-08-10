@@ -760,46 +760,6 @@ def try_unlock_record(record, entered_pin):
     return False
 
 
-def apply_pin_value(entered_pin, record):
-    entered_pin = str(entered_pin)
-    if not entered_pin.isdigit() or len(entered_pin) > 8:
-        return False
-
-    st.session_state.pin_keypad_value = entered_pin
-    st.session_state.pin_keypad_error = ""
-
-    pin_protection = record["result"].get("pin_protection")
-    expected_length = pin_protection.get("length")
-
-    if verify_pin(entered_pin, pin_protection):
-        complete_pin_unlock(record, entered_pin, pin_protection)
-        return True
-    elif (
-        isinstance(expected_length, int)
-        and 4 <= expected_length <= 8
-        and len(entered_pin) >= expected_length
-    ) or len(entered_pin) >= 8:
-        st.session_state.pin_keypad_value = ""
-        st.session_state.pin_keypad_error = "PIN 錯誤，請再試一次。"
-
-    return False
-
-
-def enter_pin_digit(digit, record):
-    current_pin = st.session_state.pin_keypad_value
-    if len(current_pin) >= 8:
-        return False
-
-    return apply_pin_value(f"{current_pin}{digit}", record)
-
-
-def remove_pin_digit():
-    st.session_state.pin_keypad_value = (
-        st.session_state.pin_keypad_value[:-1]
-    )
-    st.session_state.pin_keypad_error = ""
-
-
 def confirm_keypad_pin(record):
     entered_pin = st.session_state.pin_keypad_value
     valid, pin_error = validate_pin(entered_pin)
@@ -827,30 +787,7 @@ def ignore_comparison_keyboard_action():
 )
 def show_pin_keypad(record):
     st.caption(record["title"])
-    st.caption("可直接使用電腦數字鍵輸入，Enter 確認。")
-    st.markdown(
-        """
-        <style>
-        .st-key-pin_keypad_grid [data-testid="stHorizontalBlock"] {
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 0.5rem !important;
-        }
-        .st-key-pin_keypad_grid [data-testid="stColumn"],
-        .st-key-pin_keypad_grid [data-testid="column"] {
-            flex: 1 1 0 !important;
-            width: 0 !important;
-            min-width: 0 !important;
-        }
-        .st-key-pin_keypad_grid button {
-            min-height: 3rem;
-            font-size: 1.15rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+    st.caption("可點擊下方鍵盤，或直接使用電腦數字鍵輸入。")
 
     pin_protection = record["result"].get("pin_protection")
     expected_pin_length = (
@@ -858,6 +795,9 @@ def show_pin_keypad(record):
         if isinstance(pin_protection, dict)
         else None
     )
+    if st.session_state.pin_keypad_error:
+        st.error(st.session_state.pin_keypad_error)
+
     keyboard_result = pin_keyboard_listener(
         data={
             "currentPin": st.session_state.pin_keypad_value,
@@ -866,7 +806,7 @@ def show_pin_keypad(record):
         key=f"pin_keyboard_{record['id']}",
         on_action_change=ignore_pin_keyboard_action,
         width="stretch",
-        height=64
+        height=350
     )
     keyboard_event = getattr(keyboard_result, "action", None)
 
@@ -895,66 +835,6 @@ def show_pin_keypad(record):
             elif action_type == "cancel":
                 close_pin_prompt()
                 st.rerun(scope="app")
-
-    entered_length = len(st.session_state.pin_keypad_value)
-
-    if st.session_state.pin_keypad_error:
-        st.error(st.session_state.pin_keypad_error)
-
-    keypad_grid = st.container(key="pin_keypad_grid")
-    clicked_digit = None
-
-    for row in (("1", "2", "3"), ("4", "5", "6"), ("7", "8", "9")):
-        columns = keypad_grid.columns(3)
-        for column, digit in zip(columns, row):
-            if column.button(
-                digit,
-                key=f"pin_key_{record['id']}_{digit}",
-                width="stretch"
-            ):
-                clicked_digit = digit
-
-    backspace_column, zero_column, confirm_column = keypad_grid.columns(3)
-    backspace_clicked = backspace_column.button(
-        "⌫",
-        key=f"pin_key_{record['id']}_backspace",
-        width="stretch",
-        disabled=entered_length == 0
-    )
-    if zero_column.button(
-        "0",
-        key=f"pin_key_{record['id']}_0",
-        width="stretch"
-    ):
-        clicked_digit = "0"
-    confirm_clicked = confirm_column.button(
-        "✓",
-        key=f"pin_key_{record['id']}_confirm",
-        type="primary",
-        width="stretch"
-    )
-
-    cancel_clicked = st.button(
-        "取消",
-        key=f"pin_key_{record['id']}_cancel",
-        width="stretch"
-    )
-
-    if clicked_digit is not None:
-        unlocked = enter_pin_digit(clicked_digit, record)
-        st.rerun(scope="app" if unlocked else "fragment")
-
-    if backspace_clicked:
-        remove_pin_digit()
-        st.rerun(scope="fragment")
-
-    if confirm_clicked:
-        unlocked = confirm_keypad_pin(record)
-        st.rerun(scope="app" if unlocked else "fragment")
-
-    if cancel_clicked:
-        close_pin_prompt()
-        st.rerun(scope="app")
 
 
 def apply_result_edits(ranking, edited_data):

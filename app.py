@@ -1060,14 +1060,14 @@ def make_figure():
         st.session_state.quadrant_settings
     )
     quadrant_areas = {
-        "top_right": (0, 0, 110, 110, 105, 103, "right", "top"),
-        "top_left": (-110, 0, 110, 110, -105, 103, "left", "top"),
-        "bottom_left": (-110, -110, 110, 110, -105, -103, "left", "bottom"),
-        "bottom_right": (0, -110, 110, 110, 105, -103, "right", "bottom")
+        "top_right": (0, 0, 110, 110, 55, 55),
+        "top_left": (-110, 0, 110, 110, -55, 55),
+        "bottom_left": (-110, -110, 110, 110, -55, -55),
+        "bottom_right": (0, -110, 110, 110, 55, -55)
     }
 
     for quadrant, area in quadrant_areas.items():
-        x, y, width, height, label_x, label_y, horizontal, vertical = area
+        x, y, width, height, label_x, label_y = area
         setting = quadrants[quadrant]
         axis.add_patch(
             plt.Rectangle(
@@ -1084,11 +1084,13 @@ def make_figure():
             label_x,
             label_y,
             setting["name"],
-            horizontalalignment=horizontal,
-            verticalalignment=vertical,
+            horizontalalignment="center",
+            verticalalignment="center",
             fontproperties=CHINESE_FONT,
+            fontsize=18,
             color=STATIC_CHART_TEXT_COLOR,
-            zorder=2
+            alpha=0.52,
+            zorder=1
         )
 
     axis.axhline(0, color="gray", linewidth=1)

@@ -2111,8 +2111,8 @@ elif st.session_state.stage == "results":
 
     st.markdown("### 📝 備註與定義")
     st.caption(
-        "按表格下方的 ＋ 新增一列；對象可輸入象限、朋友或任何自訂文字。"
-        "備註只會顯示在這裡，不會出現在圖表上。"
+        "按 ＋ 新增一列並選擇象限或朋友；若選「自訂…」，請在自訂對象欄輸入文字。"
+        "要移除資料時勾選「刪除」再保存。備註不會出現在圖表上。"
     )
 
     quadrant_settings = normalized_quadrant_settings(
@@ -2126,6 +2126,8 @@ elif st.session_state.stage == "results":
         f"朋友｜{name}": name
         for name in st.session_state.names
     }
+    custom_target_option = "自訂…"
+    target_options = [*quadrant_labels, *friend_labels, custom_target_option]
     stored_annotations = normalized_annotations(
         st.session_state.annotations
     )
@@ -2151,15 +2153,29 @@ elif st.session_state.stage == "results":
                 None
             )
         else:
-            target_label = annotation["target_id"]
+            target_label = custom_target_option
 
         if target_label:
             annotation_rows.append(
-                {"對象": target_label, "備註／定義": annotation["note"]}
+                {
+                    "刪除": False,
+                    "對象": target_label,
+                    "自訂對象": (
+                        annotation["target_id"]
+                        if annotation["target_type"] == "custom"
+                        else ""
+                    ),
+                    "備註／定義": annotation["note"]
+                }
             )
 
     annotation_editor_data = annotation_rows or [
-        {"對象": None, "備註／定義": ""}
+        {
+            "刪除": False,
+            "對象": None,
+            "自訂對象": "",
+            "備註／定義": ""
+        }
     ]
 
     with st.form("annotations_form"):
@@ -2170,11 +2186,21 @@ elif st.session_state.stage == "results":
             hide_index=True,
             num_rows="dynamic",
             column_config={
-                "對象": st.column_config.TextColumn(
+                "刪除": st.column_config.CheckboxColumn(
+                    "刪除",
+                    default=False,
+                    help="勾選後按保存即可刪除此列"
+                ),
+                "對象": st.column_config.SelectboxColumn(
                     "對象",
+                    options=target_options,
                     required=True,
+                    help="選擇象限、朋友或自訂"
+                ),
+                "自訂對象": st.column_config.TextColumn(
+                    "自訂對象",
                     max_chars=80,
-                    help="可輸入象限、朋友或任何自訂文字"
+                    help="只有選擇「自訂…」時需要填寫"
                 ),
                 "備註／定義": st.column_config.TextColumn(
                     "備註／定義",
@@ -2198,8 +2224,25 @@ elif st.session_state.stage == "results":
         new_annotations = []
         invalid_annotation = False
         for row in edited_annotation_rows:
-            target = str(row.get("對象", "")).strip()
-            note = str(row.get("備註／定義", "")).strip()
+            target_value = row.get("對象")
+            custom_target_value = row.get("自訂對象")
+            note_value = row.get("備註／定義")
+            target = (
+                "" if target_value is None else str(target_value).strip()
+            )
+            custom_target = (
+                ""
+                if custom_target_value is None
+                else str(custom_target_value).strip()
+            )
+            note = "" if note_value is None else str(note_value).strip()
+
+            if bool(row.get("刪除", False)):
+                continue
+
+            if not target and not custom_target and not note:
+                continue
+
             if not target or not note:
                 invalid_annotation = True
                 break
@@ -2210,9 +2253,12 @@ elif st.session_state.stage == "results":
             elif target in friend_labels:
                 target_type = "friend"
                 target_id = friend_labels[target]
-            else:
+            elif target == custom_target_option and custom_target:
                 target_type = "custom"
-                target_id = target
+                target_id = custom_target
+            else:
+                invalid_annotation = True
+                break
 
             new_annotations.append(
                 {
@@ -2223,7 +2269,9 @@ elif st.session_state.stage == "results":
             )
 
         if invalid_annotation:
-            st.error("每一列都需要選擇對象並填寫備註。")
+            st.error(
+                "每一列都需要選擇對象並填寫備註；選擇「自訂…」時也要填寫自訂對象。"
+            )
         else:
             st.session_state.annotations = normalized_annotations(
                 new_annotations

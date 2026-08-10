@@ -2157,10 +2157,9 @@ elif st.session_state.stage == "results":
                 {"對象": target_label, "備註／定義": annotation["note"]}
             )
 
-    annotation_editor_data = annotation_rows or {
-        "對象": [],
-        "備註／定義": []
-    }
+    annotation_editor_data = annotation_rows or [
+        {"對象": None, "備註／定義": ""}
+    ]
 
     with st.form("annotations_form"):
         edited_annotations = st.data_editor(

@@ -65,6 +65,13 @@ DEFAULT_DISPLAY_SETTINGS = {
     "y_axis_title": "好感度：負面 ← → 喜歡"
 }
 
+DEFAULT_QUADRANT_SETTINGS = {
+    "top_right": {"name": "右上象限", "color": "#D9EAF7"},
+    "top_left": {"name": "左上象限", "color": "#E3F2DD"},
+    "bottom_left": {"name": "左下象限", "color": "#FBE5D6"},
+    "bottom_right": {"name": "右下象限", "color": "#EADCF4"}
+}
+
 
 def normalized_display_settings(settings=None):
     normalized = dict(DEFAULT_DISPLAY_SETTINGS)
@@ -74,6 +81,27 @@ def normalized_display_settings(settings=None):
             value = str(settings.get(key, "")).strip()
             if value:
                 normalized[key] = value[:80]
+
+    return normalized
+
+
+def normalized_quadrant_settings(settings=None):
+    normalized = deepcopy(DEFAULT_QUADRANT_SETTINGS)
+
+    if not isinstance(settings, dict):
+        return normalized
+
+    for quadrant, defaults in DEFAULT_QUADRANT_SETTINGS.items():
+        supplied = settings.get(quadrant)
+        if not isinstance(supplied, dict):
+            continue
+
+        name = str(supplied.get("name", "")).strip()
+        color = str(supplied.get("color", "")).strip()
+        if name:
+            normalized[quadrant]["name"] = name[:30]
+        if re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            normalized[quadrant]["color"] = color.upper()
 
     return normalized
 
@@ -146,7 +174,10 @@ def build_result_data(
         "likability_scores": likability_scores,
         "x_coordinates": x_coordinates,
         "y_coordinates": y_coordinates,
-        "display_settings": normalized_display_settings(display_settings)
+        "display_settings": normalized_display_settings(display_settings),
+        "quadrant_settings": normalized_quadrant_settings(
+            st.session_state.quadrant_settings
+        )
     }
 
     if pin_protection is not None:
@@ -313,6 +344,7 @@ def initialize_state():
         "stage_question_max": 1,
         "guest_mode": False,
         "display_settings": normalized_display_settings(),
+        "quadrant_settings": normalized_quadrant_settings(),
         "display_settings_loaded": False,
         "pin_protection": None,
         "pin_prompt_open": False,
@@ -633,6 +665,9 @@ def load_saved_into_state(record):
     st.session_state.y_coordinates = saved_results["y_coordinates"]
     st.session_state.display_settings = normalized_display_settings(
         saved_results.get("display_settings")
+    )
+    st.session_state.quadrant_settings = normalized_quadrant_settings(
+        saved_results.get("quadrant_settings")
     )
     st.session_state.current_record_id = record["id"]
     st.session_state.selected_record_id = record["id"]
@@ -1021,6 +1056,41 @@ def make_figure():
     figure, axis = plt.subplots(figsize=(8, 8))
     figure.patch.set_facecolor("white")
     axis.set_facecolor("white")
+    quadrants = normalized_quadrant_settings(
+        st.session_state.quadrant_settings
+    )
+    quadrant_areas = {
+        "top_right": (0, 0, 110, 110, 105, 103, "right", "top"),
+        "top_left": (-110, 0, 110, 110, -105, 103, "left", "top"),
+        "bottom_left": (-110, -110, 110, 110, -105, -103, "left", "bottom"),
+        "bottom_right": (0, -110, 110, 110, 105, -103, "right", "bottom")
+    }
+
+    for quadrant, area in quadrant_areas.items():
+        x, y, width, height, label_x, label_y, horizontal, vertical = area
+        setting = quadrants[quadrant]
+        axis.add_patch(
+            plt.Rectangle(
+                (x, y),
+                width,
+                height,
+                facecolor=setting["color"],
+                edgecolor="none",
+                alpha=0.38,
+                zorder=0
+            )
+        )
+        axis.text(
+            label_x,
+            label_y,
+            setting["name"],
+            horizontalalignment=horizontal,
+            verticalalignment=vertical,
+            fontproperties=CHINESE_FONT,
+            color=STATIC_CHART_TEXT_COLOR,
+            zorder=2
+        )
+
     axis.axhline(0, color="gray", linewidth=1)
     axis.axvline(0, color="gray", linewidth=1)
 
@@ -1028,14 +1098,15 @@ def make_figure():
         x = st.session_state.x_coordinates[name]
         y = st.session_state.y_coordinates[name]
 
-        axis.scatter(x, y, s=100)
+        axis.scatter(x, y, s=100, zorder=3)
         axis.annotate(
             name,
             (x, y),
             xytext=(5, 5),
             textcoords="offset points",
             fontproperties=CHINESE_FONT,
-            color=STATIC_CHART_TEXT_COLOR
+            color=STATIC_CHART_TEXT_COLOR,
+            zorder=4
         )
 
     axis.set_xlim(-110, 110)
@@ -1921,6 +1992,67 @@ elif st.session_state.stage == "results":
     )
 
     with st.expander("查看靜態圖"):
+        st.markdown("#### 設定四個象限")
+        st.caption("輸入各區名稱並選擇背景色，設定會顯示在下方靜態圖並隨結果保存。")
+        quadrant_settings = normalized_quadrant_settings(
+            st.session_state.quadrant_settings
+        )
+
+        with st.form("quadrant_settings_form"):
+            quadrant_inputs = {}
+            quadrant_labels = (
+                ("top_left", "左上象限"),
+                ("top_right", "右上象限"),
+                ("bottom_left", "左下象限"),
+                ("bottom_right", "右下象限")
+            )
+
+            for row in (quadrant_labels[:2], quadrant_labels[2:]):
+                columns = st.columns(2)
+                for column, (quadrant, label) in zip(columns, row):
+                    with column:
+                        name = st.text_input(
+                            f"{label}名稱",
+                            value=quadrant_settings[quadrant]["name"],
+                            max_chars=30,
+                            key=f"{quadrant}_name"
+                        )
+                        color = st.color_picker(
+                            f"{label}色塊",
+                            value=quadrant_settings[quadrant]["color"],
+                            key=f"{quadrant}_color"
+                        )
+                        quadrant_inputs[quadrant] = {
+                            "name": name,
+                            "color": color
+                        }
+
+            apply_quadrants = st.form_submit_button(
+                "套用象限設定",
+                type="primary",
+                width="stretch"
+            )
+
+        if apply_quadrants:
+            if any(
+                not setting["name"].strip()
+                for setting in quadrant_inputs.values()
+            ):
+                st.error("四個象限的名稱都不能留白。")
+            else:
+                st.session_state.quadrant_settings = (
+                    normalized_quadrant_settings(quadrant_inputs)
+                )
+                save_current_results(
+                    st.session_state.names,
+                    st.session_state.familiarity_scores,
+                    st.session_state.likability_scores,
+                    st.session_state.x_coordinates,
+                    st.session_state.y_coordinates
+                )
+                st.toast("象限名稱與色塊已套用並保存。", icon="✅")
+                st.rerun()
+
         figure = make_figure()
         st.pyplot(figure, width="stretch")
         plt.close(figure)

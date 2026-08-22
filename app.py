@@ -569,6 +569,111 @@ def apply_fast_ranking_to_scores(stage):
             scores[name] = score
         higher_count += len(group)
 
+def values_for_new_groups(groups, existing_values, new_names, bounds=None):
+    """Interpolate values for new people without changing old people."""
+    new_name_set = set(new_names)
+    anchors = []
+
+    for index, group in enumerate(groups):
+        old_values = [
+            existing_values[name]
+            for name in group
+            if name not in new_name_set
+        ]
+        if old_values:
+            anchors.append((index, sum(old_values) / len(old_values)))
+
+    if not anchors:
+        return {name: 0 for name in new_names}
+
+    group_values = {index: value for index, value in anchors}
+
+    for (left_index, left_value), (right_index, right_value) in zip(
+        anchors,
+        anchors[1:]
+    ):
+        distance = right_index - left_index
+        for index in range(left_index + 1, right_index):
+            progress = (index - left_index) / distance
+            group_values[index] = (
+                left_value + (right_value - left_value) * progress
+            )
+
+    first_index, first_value = anchors[0]
+    last_index, last_value = anchors[-1]
+
+    if bounds is not None:
+        lower_bound, upper_bound = bounds
+        for index in range(first_index):
+            progress = (index + 1) / (first_index + 1)
+            group_values[index] = (
+                upper_bound + (first_value - upper_bound) * progress
+            )
+
+        trailing_count = len(groups) - last_index - 1
+        for offset, index in enumerate(
+            range(last_index + 1, len(groups)),
+            start=1
+        ):
+            progress = offset / (trailing_count + 1)
+            group_values[index] = (
+                last_value + (lower_bound - last_value) * progress
+            )
+    else:
+        slopes = [
+            abs((right_value - left_value) / (right_index - left_index))
+            for (left_index, left_value), (right_index, right_value) in zip(
+                anchors,
+                anchors[1:]
+            )
+            if right_index != left_index and right_value != left_value
+        ]
+        step = max(1, sum(slopes) / len(slopes)) if slopes else 1
+
+        for index in range(first_index - 1, -1, -1):
+            group_values[index] = first_value + step * (
+                first_index - index
+            )
+        for index in range(last_index + 1, len(groups)):
+            group_values[index] = last_value - step * (
+                index - last_index
+            )
+
+    assigned = {}
+    for index, group in enumerate(groups):
+        value = round(group_values[index])
+        for name in group:
+            if name in new_name_set:
+                assigned[name] = value
+
+    return assigned
+
+
+def apply_incremental_ranking(stage):
+    """Assign only new scores and coordinates from the fixed old scale."""
+    if stage == "familiarity":
+        scores = st.session_state.familiarity_scores
+        coordinates = st.session_state.x_coordinates
+    else:
+        scores = st.session_state.likability_scores
+        coordinates = st.session_state.y_coordinates
+
+    scores.update(
+        values_for_new_groups(
+            st.session_state.adaptive_groups,
+            scores,
+            st.session_state.new_names
+        )
+    )
+    coordinates.update(
+        values_for_new_groups(
+            st.session_state.adaptive_groups,
+            coordinates,
+            st.session_state.new_names,
+            bounds=(-100, 100)
+        )
+    )
+
 
 def fast_state_snapshot():
     keys = (
@@ -649,18 +754,22 @@ def record_answer(result, expected_stage, expected_question_index):
     if schedule_fast_question():
         return
 
-    apply_fast_ranking_to_scores(stage)
+    if st.session_state.comparison_mode == "incremental":
+        apply_incremental_ranking(stage)
+    else:
+        apply_fast_ranking_to_scores(stage)
 
     if stage == "familiarity":
         begin_fast_stage("likability")
         return
 
-    st.session_state.x_coordinates = normalize_scores(
-        st.session_state.familiarity_scores
-    )
-    st.session_state.y_coordinates = normalize_scores(
-        st.session_state.likability_scores
-    )
+    if st.session_state.comparison_mode != "incremental":
+        st.session_state.x_coordinates = normalize_scores(
+            st.session_state.familiarity_scores
+        )
+        st.session_state.y_coordinates = normalize_scores(
+            st.session_state.likability_scores
+        )
 
     save_current_results(
         st.session_state.names,

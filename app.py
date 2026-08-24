@@ -77,18 +77,33 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .st-key-author_info_login [data-testid="stPopover"] button,
-    .st-key-author_info_main [data-testid="stPopover"] button {
+    .st-key-author_info_login,
+    .st-key-author_info_main {
+        position: fixed;
+        right: 1.5rem;
+        top: 5rem;
+        width: auto;
+        z-index: 999;
+    }
+    .st-key-author_info_login button,
+    .st-key-author_info_main button {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
         min-height: 2rem !important;
         padding: 0.1rem 0.25rem !important;
     }
-    .st-key-author_info_login [data-testid="stPopover"] button:hover,
-    .st-key-author_info_main [data-testid="stPopover"] button:hover {
+    .st-key-author_info_login button:hover,
+    .st-key-author_info_main button:hover {
         background: transparent !important;
         border: none !important;
+    }
+    @media (max-width: 640px) {
+        .st-key-author_info_login,
+        .st-key-author_info_main {
+            right: 0.75rem;
+            top: 4.5rem;
+        }
     }
     </style>
     """,
@@ -129,11 +144,22 @@ AUTHOR_NOTE_TITLES = {
 }
 
 
-def show_author_note(container_key):
+def show_author_note_dialog():
+    @st.dialog(AUTHOR_NOTE_TITLES[language()], width="large")
+    def author_note_dialog():
+        st.markdown(AUTHOR_NOTES[language()])
+
+    author_note_dialog()
+
+
+def show_author_note_button(container_key):
     with st.container(key=container_key):
-        with st.popover("ⓘ", help=t("閱讀作者的話")):
-            st.markdown(f"#### {AUTHOR_NOTE_TITLES[language()]}")
-            st.markdown(AUTHOR_NOTES[language()])
+        if st.button(
+            "ⓘ",
+            key=f"{container_key}_button",
+            help=t("閱讀作者的話")
+        ):
+            show_author_note_dialog()
 
 
 def normalized_display_settings(settings=None):
@@ -1343,12 +1369,8 @@ if (
     and not user_is_logged_in()
     and not guest_mode_enabled()
 ):
-    login_info_column, _, login_language_column = st.columns(
-        [0.08, 0.70, 0.22],
-        vertical_alignment="center"
-    )
-    with login_info_column:
-        show_author_note("author_info_login")
+    show_author_note_button("author_info_login")
+    _, login_language_column = st.columns([0.78, 0.22])
     with login_language_column:
         st.button(
             "中文" if language() == "en" else "English",
@@ -1448,8 +1470,10 @@ selected_record = get_record(
 if not st.session_state.display_settings_loaded:
     st.session_state.display_settings_loaded = True
 
-info_column, title_column, language_column, settings_column = st.columns(
-    [0.08, 0.60, 0.20, 0.12],
+show_author_note_button("author_info_main")
+
+title_column, language_column, settings_column = st.columns(
+    [0.68, 0.20, 0.12],
     vertical_alignment="center"
 )
 
@@ -1468,8 +1492,6 @@ with language_column:
         on_click=toggle_language
     )
 
-with info_column:
-    show_author_note("author_info_main")
 
 with settings_column:
     with st.popover("⚙️", help=t("自訂標題與問題文字")):

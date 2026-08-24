@@ -74,6 +74,27 @@ st.set_page_config(
     layout="centered"
 )
 
+st.markdown(
+    """
+    <style>
+    .st-key-author_info_login [data-testid="stPopover"] button,
+    .st-key-author_info_main [data-testid="stPopover"] button {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        min-height: 2rem !important;
+        padding: 0.1rem 0.25rem !important;
+    }
+    .st-key-author_info_login [data-testid="stPopover"] button:hover,
+    .st-key-author_info_main [data-testid="stPopover"] button:hover {
+        background: transparent !important;
+        border: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 DEFAULT_DISPLAY_SETTINGS = {
     "app_title": "人際關係座標圖",
     "familiarity_question": "你跟誰比較熟？",
@@ -108,10 +129,11 @@ AUTHOR_NOTE_TITLES = {
 }
 
 
-def show_author_note():
-    with st.popover("ⓘ", help=t("閱讀作者的話")):
-        st.markdown(f"#### {AUTHOR_NOTE_TITLES[language()]}")
-        st.markdown(AUTHOR_NOTES[language()])
+def show_author_note(container_key):
+    with st.container(key=container_key):
+        with st.popover("ⓘ", help=t("閱讀作者的話")):
+            st.markdown(f"#### {AUTHOR_NOTE_TITLES[language()]}")
+            st.markdown(AUTHOR_NOTES[language()])
 
 
 def normalized_display_settings(settings=None):
@@ -1321,10 +1343,12 @@ if (
     and not user_is_logged_in()
     and not guest_mode_enabled()
 ):
-    _, login_language_column, login_info_column = st.columns(
-        [0.70, 0.20, 0.10],
+    login_info_column, _, login_language_column = st.columns(
+        [0.08, 0.70, 0.22],
         vertical_alignment="center"
     )
+    with login_info_column:
+        show_author_note("author_info_login")
     with login_language_column:
         st.button(
             "中文" if language() == "en" else "English",
@@ -1332,8 +1356,6 @@ if (
             width="stretch",
             on_click=toggle_language
         )
-    with login_info_column:
-        show_author_note()
     st.title(t("🗺️ 人際關係座標圖"))
     st.write(t("登入可保存並載入自己的結果；也可以不登入單次使用。"))
     st.button(
@@ -1426,8 +1448,8 @@ selected_record = get_record(
 if not st.session_state.display_settings_loaded:
     st.session_state.display_settings_loaded = True
 
-title_column, language_column, info_column, settings_column = st.columns(
-    [0.60, 0.20, 0.10, 0.10],
+info_column, title_column, language_column, settings_column = st.columns(
+    [0.08, 0.60, 0.20, 0.12],
     vertical_alignment="center"
 )
 
@@ -1447,7 +1469,7 @@ with language_column:
     )
 
 with info_column:
-    show_author_note()
+    show_author_note("author_info_main")
 
 with settings_column:
     with st.popover("⚙️", help=t("自訂標題與問題文字")):

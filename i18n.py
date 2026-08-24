@@ -146,6 +146,8 @@ ENGLISH_TRANSLATIONS = {
     "{name} 的座標必須是有效數字。": "{name}'s coordinates must be valid numbers.",
     "已登入：{name}": "Signed in: {name}",
     "智慧比較 · 已回答 {answered} 題 · 此階段最多約 {maximum} 題": "Smart comparison · Answered {answered} questions · Up to about {maximum} questions in this stage",
+    "閱讀作者的話": "Read a note from the creator",
+    "#### 作者的話": "#### A Note from the Creator",
 }
 
 

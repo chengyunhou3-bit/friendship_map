@@ -89,6 +89,25 @@ DEFAULT_QUADRANT_SETTINGS = {
     "bottom_right": {"name": "右下象限", "color": "#EADCF4"}
 }
 
+AUTHOR_NOTES = {
+    "zh": """好的朋友，能夠支持你走過人生中困難的時刻；但一段不好的關係，也可能輕易消耗掉大量的時間與精神。生活中，我們會遇到許多來來去去的過客，每個人都有自己獨特的地方。然而，人的時間與精力終究是有限的，因此我們應該時常思考身邊不同的人對自己的重要性，以及彼此之間的真誠度、信任程度、合作性和能夠帶來的支持。
+
+這個工具正是希望幫助我們將平時累積的經驗與認知具象化，進一步量化並記錄下來。它的目的並不是單純替身邊的人評分，而是把原本模糊、散落在記憶中的感受整理成可以重新檢視的資訊，降低我們記憶這些抽象資訊的負擔。同時，也可以透過圖表定期回顧自己的判斷，反思自己的行為、想法與真正重視的事情是否一致。
+
+事實上，這樣的方法並不只適用於朋友或人際關係。生活中的許多事情，例如餐廳的排名、飯店的品質，甚至家具的性價比，都可以利用這種雙軸圖表來整理，讓原本模糊的感受與認知變得更加清晰。這個工具對我來說非常實用，也希望它能幫助大家更有系統地整理自己的經驗與想法。""",
+    "en": """Good relationships can make life easier, while bad ones can take up a surprising amount of time and energy. Since our attention is limited, it can be useful to step back and think more clearly about the people around us, including how much we trust them, how supportive they are, and how well we work together.
+
+This tool helps turn those scattered impressions into something more concrete. Instead of keeping everything in your head, you can record and visualize your own experiences over time. The goal is not to reduce people to a score, but to make your thinking easier to review and reflect on.
+
+The same idea can also be applied to things beyond relationships. Restaurants, hotels, furniture, or almost anything with multiple factors can be compared using a simple two axis chart. I find this approach useful for organizing subjective opinions and making them easier to understand, and I hope you will too."""
+}
+
+
+def show_author_note():
+    with st.popover("ⓘ", help=t("閱讀作者的話")):
+        st.markdown(t("#### 作者的話"))
+        st.markdown(AUTHOR_NOTES[language()])
+
 
 def normalized_display_settings(settings=None):
     normalized = dict(DEFAULT_DISPLAY_SETTINGS)
@@ -1297,7 +1316,10 @@ if (
     and not user_is_logged_in()
     and not guest_mode_enabled()
 ):
-    _, login_language_column = st.columns([0.78, 0.22])
+    _, login_language_column, login_info_column = st.columns(
+        [0.70, 0.20, 0.10],
+        vertical_alignment="center"
+    )
     with login_language_column:
         st.button(
             "中文" if language() == "en" else "English",
@@ -1305,6 +1327,8 @@ if (
             width="stretch",
             on_click=toggle_language
         )
+    with login_info_column:
+        show_author_note()
     st.title(t("🗺️ 人際關係座標圖"))
     st.write(t("登入可保存並載入自己的結果；也可以不登入單次使用。"))
     st.button(
@@ -1397,8 +1421,8 @@ selected_record = get_record(
 if not st.session_state.display_settings_loaded:
     st.session_state.display_settings_loaded = True
 
-title_column, language_column, settings_column = st.columns(
-    [0.68, 0.20, 0.12],
+title_column, language_column, info_column, settings_column = st.columns(
+    [0.60, 0.20, 0.10, 0.10],
     vertical_alignment="center"
 )
 
@@ -1416,6 +1440,9 @@ with language_column:
         width="stretch",
         on_click=toggle_language
     )
+
+with info_column:
+    show_author_note()
 
 with settings_column:
     with st.popover("⚙️", help=t("自訂標題與問題文字")):

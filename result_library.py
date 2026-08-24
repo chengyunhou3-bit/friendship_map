@@ -5,13 +5,47 @@ from uuid import uuid4
 
 
 STORAGE_VERSION = 2
+SUPPORTED_LANGUAGES = {"en", "zh"}
 
 
 def empty_library():
     return {
         "storage_version": STORAGE_VERSION,
+        "preferences": {},
         "records": []
     }
+
+
+def _normalize_preferences(payload):
+    preferences = payload.get("preferences", {})
+
+    if not isinstance(preferences, dict):
+        return {}
+
+    selected_language = str(preferences.get("language", "")).strip()
+
+    if selected_language not in SUPPORTED_LANGUAGES:
+        return {}
+
+    return {"language": selected_language}
+
+
+def get_preferred_language(library):
+    return _normalize_preferences(
+        library if isinstance(library, dict) else {}
+    ).get("language")
+
+
+def set_preferred_language(library, selected_language):
+    updated_library = normalize_library(library)
+
+    if selected_language not in SUPPORTED_LANGUAGES:
+        raise ValueError("Unsupported language preference")
+
+    updated_library["preferences"] = {
+        "language": selected_language
+    }
+    return updated_library
 
 
 def default_record_title(result=None):
@@ -74,6 +108,7 @@ def normalize_library(payload):
         )
         return {
             "storage_version": STORAGE_VERSION,
+            "preferences": _normalize_preferences(payload),
             "records": records
         }
 
@@ -81,6 +116,7 @@ def normalize_library(payload):
         saved_at = str(payload.get("saved_at", "")).strip()
         return {
             "storage_version": STORAGE_VERSION,
+            "preferences": {},
             "records": [
                 {
                     "id": _legacy_record_id(payload),

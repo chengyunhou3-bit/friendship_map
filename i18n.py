@@ -150,7 +150,7 @@ ENGLISH_TRANSLATIONS = {
 
 
 def language():
-    return st.session_state.get("language", "zh")
+    return st.session_state.get("language", "en")
 
 
 def t(text):

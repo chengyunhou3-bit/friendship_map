@@ -39,8 +39,10 @@ from result_library import (
     default_record_title,
     delete_record as remove_record_from_library,
     get_record,
+    get_preferred_language,
     normalize_library,
     record_label,
+    set_preferred_language,
     upsert_record
 )
 from record_pin import (
@@ -54,7 +56,16 @@ from record_pin import (
 
 
 if "language" not in st.session_state:
-    st.session_state.language = "zh"
+    st.session_state.language = "en"
+
+if "language_preference_loaded" not in st.session_state:
+    st.session_state.language_preference_loaded = False
+
+if "language_preference_owner_id" not in st.session_state:
+    st.session_state.language_preference_owner_id = None
+
+if "language_preference_pending" not in st.session_state:
+    st.session_state.language_preference_pending = False
 
 
 st.set_page_config(
@@ -144,6 +155,7 @@ def localized_quadrant_settings(settings=None):
 
 def toggle_language():
     st.session_state.language = "zh" if language() == "en" else "en"
+    st.session_state.language_preference_pending = True
     if "editor_version" in st.session_state:
         st.session_state.editor_version += 1
 
@@ -1320,6 +1332,45 @@ except Exception as error:
     st.stop()
 
 result_library = normalize_library(stored_results)
+
+if (
+    cloud_mode_enabled()
+    and user_is_logged_in()
+    and not guest_mode_enabled()
+):
+    preference_owner_id = current_owner_id()
+    preference_needs_loading = (
+        not st.session_state.language_preference_loaded
+        or st.session_state.language_preference_owner_id
+        != preference_owner_id
+    )
+
+    if preference_needs_loading:
+        preferred_language = (
+            get_preferred_language(result_library) or "en"
+        )
+        language_changed = preferred_language != language()
+        st.session_state.language = preferred_language
+        st.session_state.language_preference_loaded = True
+        st.session_state.language_preference_owner_id = (
+            preference_owner_id
+        )
+        st.session_state.language_preference_pending = False
+
+        if language_changed:
+            st.rerun()
+    elif st.session_state.language_preference_pending:
+        result_library = set_preferred_language(
+            result_library,
+            language()
+        )
+        persist_result_library(result_library)
+        st.session_state.language_preference_pending = False
+else:
+    st.session_state.language_preference_loaded = True
+    st.session_state.language_preference_owner_id = None
+    st.session_state.language_preference_pending = False
+
 saved_records = result_library["records"]
 saved_record_ids = [record["id"] for record in saved_records]
 

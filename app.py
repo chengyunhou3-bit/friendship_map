@@ -102,10 +102,15 @@ This tool helps turn those scattered impressions into something more concrete. I
 The same idea can also be applied to things beyond relationships. Restaurants, hotels, furniture, or almost anything with multiple factors can be compared using a simple two axis chart. I find this approach useful for organizing subjective opinions and making them easier to understand, and I hope you will too."""
 }
 
+AUTHOR_NOTE_TITLES = {
+    "zh": "作者的話",
+    "en": "A Note from the Creator"
+}
+
 
 def show_author_note():
     with st.popover("ⓘ", help=t("閱讀作者的話")):
-        st.markdown(t("#### 作者的話"))
+        st.markdown(f"#### {AUTHOR_NOTE_TITLES[language()]}")
         st.markdown(AUTHOR_NOTES[language()])
 
 

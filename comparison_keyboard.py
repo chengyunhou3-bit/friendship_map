@@ -3,9 +3,9 @@ import streamlit as st
 
 COMPONENT_HTML = """
 <div class="comparison-keyboard-hint" aria-live="polite">
-  <span><kbd>←</kbd>／<kbd>A</kbd> 左邊</span>
-  <span><kbd>↓</kbd>／<kbd>S</kbd> 一樣</span>
-  <span><kbd>→</kbd>／<kbd>D</kbd> 右邊</span>
+  <span id="left-hint"><kbd>←</kbd>／<kbd>A</kbd> 左邊</span>
+  <span id="equal-hint"><kbd>↓</kbd>／<kbd>S</kbd> 一樣</span>
+  <span id="right-hint"><kbd>→</kbd>／<kbd>D</kbd> 右邊</span>
 </div>
 """
 
@@ -49,7 +49,11 @@ kbd {
 COMPONENT_JS = """
 export default function(component) {
   const appDocument = component.parentElement.ownerDocument;
-  const { setTriggerValue } = component;
+  const { data, parentElement, setTriggerValue } = component;
+  const isEnglish = data?.language === "en";
+  parentElement.querySelector("#left-hint").lastChild.textContent = isEnglish ? " Left" : " 左邊";
+  parentElement.querySelector("#equal-hint").lastChild.textContent = isEnglish ? " Equal" : " 一樣";
+  parentElement.querySelector("#right-hint").lastChild.textContent = isEnglish ? " Right" : " 右邊";
   let submitted = false;
   let eventSequence = 0;
 

@@ -92,6 +92,13 @@ export default function(component) {
     "#pin-confirm"
   );
   const cancelButton = component.parentElement.querySelector("#pin-cancel");
+  const keypad = component.parentElement.querySelector("#pin-keypad");
+  const isEnglish = data?.language === "en";
+  display.setAttribute("aria-label", isEnglish ? "PIN input" : "PIN 輸入");
+  keypad.setAttribute("aria-label", isEnglish ? "PIN keypad" : "PIN 數字鍵盤");
+  backspaceButton.setAttribute("aria-label", isEnglish ? "Delete one digit" : "刪除一位");
+  confirmButton.setAttribute("aria-label", isEnglish ? "Confirm" : "確認");
+  cancelButton.textContent = isEnglish ? "Cancel" : "取消";
   let eventSequence = 0;
   let submitted = false;
   let pinValue = typeof data?.currentPin === "string"
@@ -104,7 +111,7 @@ export default function(component) {
   const updateDisplay = () => {
     display.textContent = pinValue.length > 0
       ? "● ".repeat(pinValue.length).trim()
-      : "請輸入 PIN";
+      : (isEnglish ? "Enter PIN" : "請輸入 PIN");
   };
 
   const sendAction = (type) => {

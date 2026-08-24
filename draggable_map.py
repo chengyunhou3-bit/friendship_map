@@ -178,6 +178,25 @@ export default function(component) {
   const saveButton = parentElement.querySelector("#save-coordinates");
   const saveStatus = parentElement.querySelector("#save-status");
   const svgNamespace = "http://www.w3.org/2000/svg";
+  const isEnglish = data?.language === "en";
+  const labels = isEnglish ? {
+    map: "Draggable relationship map",
+    save: "💾 Save coordinates",
+    idle: "Auto-save 30 seconds after dragging",
+    saving: "Saving…",
+    pending: "Unsaved; auto-saves after 30 seconds of inactivity",
+    coordinate: "coordinates"
+  } : {
+    map: "可拖曳的人際關係座標圖",
+    save: "💾 儲存座標",
+    idle: "拖曳後 30 秒自動儲存",
+    saving: "正在儲存…",
+    pending: "尚未儲存；停止拖曳 30 秒後自動儲存",
+    coordinate: "座標"
+  };
+  svg.setAttribute("aria-label", labels.map);
+  saveButton.textContent = labels.save;
+  saveStatus.textContent = labels.idle;
 
   const left = 70;
   const right = 650;
@@ -187,11 +206,16 @@ export default function(component) {
   const plotHeight = bottom - top;
   const ticks = [-100, -50, 0, 50, 100];
 
-  mapTitle.textContent = data?.title || "人際關係座標圖";
+  mapTitle.textContent = data?.title
+    || (isEnglish ? "Relationship Map" : "人際關係座標圖");
   xAxisTitle.textContent = data?.axisTitles?.x
-    || "熟悉度：不熟 ← → 熟悉";
+    || (isEnglish
+      ? "Familiarity: Less familiar ← → More familiar"
+      : "熟悉度：不熟 ← → 熟悉");
   yAxisTitle.textContent = data?.axisTitles?.y
-    || "好感度：負面 ← → 喜歡";
+    || (isEnglish
+      ? "Likability: Negative ← → Positive"
+      : "好感度：負面 ← → 喜歡");
 
   const clamp = (value) => Math.max(-100, Math.min(100, value));
   const toPixelX = (value) => left + ((value + 100) / 200) * plotWidth;
@@ -284,7 +308,7 @@ export default function(component) {
     const movedPoints = Array.from(pendingMoves.values());
     pendingMoves.clear();
     saveButton.disabled = true;
-    saveStatus.textContent = "正在儲存…";
+    saveStatus.textContent = labels.saving;
     setTriggerValue("moved", {
       points: movedPoints,
       eventId: `${Date.now()}`
@@ -319,7 +343,7 @@ export default function(component) {
     });
     if (saveButton.disabled) {
       saveButton.disabled = false;
-      saveStatus.textContent = "尚未儲存；停止拖曳 30 秒後自動儲存";
+      saveStatus.textContent = labels.pending;
     }
     scheduleSave();
   };
@@ -340,7 +364,7 @@ export default function(component) {
       class: "person-point",
       tabindex: "0",
       role: "button",
-      "aria-label": `${point.name}，座標 ${point.x}, ${point.y}`
+      "aria-label": `${point.name}, ${labels.coordinate} ${point.x}, ${point.y}`
     });
 
     const circle = makeSvgElement("circle", {

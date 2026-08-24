@@ -3,13 +3,13 @@ import streamlit as st
 
 COMPONENT_HTML = """
 <div class="notes-editor">
-  <div class="notes-header"><span class="order-heading" title="拖曳排序">↕</span><span>對象</span><span>備註／定義</span></div>
+  <div class="notes-header"><span id="order-heading" class="order-heading" title="拖曳排序">↕</span><span id="target-heading">對象</span><span id="note-heading">備註／定義</span></div>
   <div id="notes-rows"></div>
   <button id="add-note" class="add-note" type="button" aria-label="新增一列">＋</button>
   <button id="save-notes" class="save-notes" type="button">保存備註</button>
   <span id="notes-status" class="notes-status"></span>
   <dialog id="delete-dialog" class="delete-dialog">
-    <p>確定要刪除這一列備註嗎？</p>
+    <p id="delete-message">確定要刪除這一列備註嗎？</p>
     <div class="dialog-actions">
       <button id="cancel-delete" type="button">取消</button>
       <button id="confirm-delete" class="confirm-delete" type="button">刪除</button>
@@ -66,6 +66,49 @@ export default function(component) {
   const cancelDelete = parentElement.querySelector("#cancel-delete");
   const confirmDelete = parentElement.querySelector("#confirm-delete");
   const options = Array.isArray(data?.options) ? data.options : [];
+  const isEnglish = data?.language === "en";
+  const labels = isEnglish ? {
+    order: "Drag to reorder",
+    target: "Target",
+    note: "Note / definition",
+    add: "Add row",
+    save: "Save notes",
+    deleteMessage: "Delete this note row?",
+    cancel: "Cancel",
+    delete: "Delete",
+    remove: "Delete row",
+    back: "Back to options",
+    customPlaceholder: "Enter a custom target",
+    selectPlaceholder: "Select a target",
+    notePlaceholder: "Enter a note or definition",
+    invalid: "Each row needs a target and a note.",
+    saved: "Saved."
+  } : {
+    order: "拖曳排序",
+    target: "對象",
+    note: "備註／定義",
+    add: "新增一列",
+    save: "保存備註",
+    deleteMessage: "確定要刪除這一列備註嗎？",
+    cancel: "取消",
+    delete: "刪除",
+    remove: "刪除此列",
+    back: "返回選單",
+    customPlaceholder: "輸入自訂對象",
+    selectPlaceholder: "選擇對象",
+    notePlaceholder: "輸入備註或定義",
+    invalid: "每列都需要對象與備註。",
+    saved: "已保存。"
+  };
+  const orderHeading = parentElement.querySelector("#order-heading");
+  orderHeading.title = labels.order;
+  parentElement.querySelector("#target-heading").textContent = labels.target;
+  parentElement.querySelector("#note-heading").textContent = labels.note;
+  addButton.setAttribute("aria-label", labels.add);
+  saveButton.textContent = labels.save;
+  parentElement.querySelector("#delete-message").textContent = labels.deleteMessage;
+  cancelDelete.textContent = labels.cancel;
+  confirmDelete.textContent = labels.delete;
   let rows = (Array.isArray(data?.rows) ? data.rows : []).map((row) => ({...row}));
   let pendingDeleteIndex = null;
   let draggedIndex = null;
@@ -83,7 +126,7 @@ export default function(component) {
       const remove = make("button", "remove-note");
       remove.type = "button";
       remove.textContent = "−";
-      remove.setAttribute("aria-label", "刪除此列");
+      remove.setAttribute("aria-label", labels.remove);
       remove.onclick = () => {
         pendingDeleteIndex = index;
         deleteDialog.showModal();
@@ -96,8 +139,8 @@ export default function(component) {
       for (let dotIndex = 0; dotIndex < 6; dotIndex += 1) {
         dragHandle.appendChild(make("span", "grip-dot"));
       }
-      dragHandle.title = "拖曳調整順序";
-      dragHandle.setAttribute("aria-label", "拖曳調整順序");
+      dragHandle.title = labels.order;
+      dragHandle.setAttribute("aria-label", labels.order);
       dragHandle.draggable = true;
       dragHandle.ondragstart = (event) => {
         draggedIndex = index;
@@ -135,12 +178,12 @@ export default function(component) {
         const back = make("button", "back-select");
         back.type = "button";
         back.textContent = "⌄";
-        back.title = "返回選單";
+        back.title = labels.back;
         back.onclick = () => { row.mode = "option"; row.target = ""; render(); };
         const input = make("input");
         input.type = "text";
         input.maxLength = 80;
-        input.placeholder = "輸入自訂對象";
+        input.placeholder = labels.customPlaceholder;
         input.value = row.custom || "";
         input.oninput = () => { row.custom = input.value; };
         wrap.append(back, input);
@@ -149,7 +192,7 @@ export default function(component) {
         const select = make("select");
         const placeholder = document.createElement("option");
         placeholder.value = "";
-        placeholder.textContent = "選擇對象";
+        placeholder.textContent = labels.selectPlaceholder;
         placeholder.disabled = true;
         placeholder.selected = !row.target;
         select.appendChild(placeholder);
@@ -176,7 +219,7 @@ export default function(component) {
       const noteInput = make("input");
       noteInput.type = "text";
       noteInput.maxLength = 500;
-      noteInput.placeholder = "輸入備註或定義";
+      noteInput.placeholder = labels.notePlaceholder;
       noteInput.value = row.note || "";
       noteInput.oninput = () => { row.note = noteInput.value; };
       noteCell.appendChild(noteInput);
@@ -201,12 +244,12 @@ export default function(component) {
     const invalid = cleaned.some((row) => !(row.note || "").trim() || (row.mode === "custom" ? !(row.custom || "").trim() : !row.target));
     status.className = "notes-status";
     if (invalid) {
-      status.textContent = "每列都需要對象與備註。";
+      status.textContent = labels.invalid;
       status.classList.add("error");
       return;
     }
     rows = cleaned;
-    status.textContent = "已保存。";
+    status.textContent = labels.saved;
     setTriggerValue("saved", { rows });
     render();
   };

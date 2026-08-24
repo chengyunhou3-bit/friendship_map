@@ -34,6 +34,7 @@ from comparison_keyboard import comparison_keyboard_listener
 from pin_keyboard import pin_keyboard_listener
 from sidebar_control import collapse_sidebar
 from notes_editor import notes_editor
+from i18n import ENGLISH_TRANSLATIONS, language, t, tf
 from result_library import (
     default_record_title,
     delete_record as remove_record_from_library,
@@ -52,8 +53,12 @@ from record_pin import (
 )
 
 
+if "language" not in st.session_state:
+    st.session_state.language = "zh"
+
+
 st.set_page_config(
-    page_title="人際關係座標圖",
+    page_title=t("人際關係座標圖"),
     page_icon=str(APP_DIRECTORY / "static" / "app-icon-512.png"),
     layout="centered"
 )
@@ -86,6 +91,19 @@ def normalized_display_settings(settings=None):
     return normalized
 
 
+def localized_display_settings(settings=None):
+    localized = normalized_display_settings(settings)
+
+    for key, chinese_default in DEFAULT_DISPLAY_SETTINGS.items():
+        english_default = ENGLISH_TRANSLATIONS[chinese_default]
+        if localized[key] in {chinese_default, english_default}:
+            localized[key] = (
+                english_default if language() == "en" else chinese_default
+            )
+
+    return localized
+
+
 def normalized_quadrant_settings(settings=None):
     normalized = deepcopy(DEFAULT_QUADRANT_SETTINGS)
 
@@ -105,6 +123,29 @@ def normalized_quadrant_settings(settings=None):
             normalized[quadrant]["color"] = color.upper()
 
     return normalized
+
+
+def localized_quadrant_settings(settings=None):
+    localized = normalized_quadrant_settings(settings)
+
+    for quadrant, defaults in DEFAULT_QUADRANT_SETTINGS.items():
+        chinese_default = defaults["name"]
+        english_default = ENGLISH_TRANSLATIONS[chinese_default]
+        if localized[quadrant]["name"] in {
+            chinese_default,
+            english_default
+        }:
+            localized[quadrant]["name"] = (
+                english_default if language() == "en" else chinese_default
+            )
+
+    return localized
+
+
+def toggle_language():
+    st.session_state.language = "zh" if language() == "en" else "en"
+    if "editor_version" in st.session_state:
+        st.session_state.editor_version += 1
 
 
 def normalized_annotations(annotations=None):
@@ -172,7 +213,7 @@ def current_owner_id():
     subject = str(st.user.get("sub", ""))
 
     if not subject:
-        raise RuntimeError("登入資料中找不到使用者 ID。")
+        raise RuntimeError(t("登入資料中找不到使用者 ID。"))
 
     return sha256(subject.encode("utf-8")).hexdigest()
 
@@ -183,7 +224,7 @@ def cloud_credentials():
     service_key = str(settings.get("service_key", "")).strip()
 
     if not url or not service_key:
-        raise RuntimeError("尚未設定 Supabase 網址或 service key。")
+        raise RuntimeError(t("尚未設定 Supabase 網址或 service key。"))
 
     return url, service_key
 
@@ -411,12 +452,15 @@ def initialize_state():
 
 def reset_app(preserve_access_mode=True):
     was_guest = guest_mode_enabled()
+    selected_language = language()
 
     for key in list(st.session_state.keys()):
         del st.session_state[key]
 
     if preserve_access_mode and was_guest:
         st.session_state.guest_mode = True
+
+    st.session_state.language = selected_language
 
 
 def start_guest_mode():
@@ -851,8 +895,9 @@ def complete_pin_unlock(record, entered_pin, pin_protection):
         save_pin_protection(record, upgraded_protection)
     load_saved_into_state(record)
     close_pin_prompt()
-    st.session_state.pin_unlock_message = (
-        f"PIN 正確，已載入「{record['title']}」。"
+    st.session_state.pin_unlock_message = tf(
+        "PIN 正確，已載入「{title}」。",
+        title=record["title"]
     )
     st.session_state.collapse_sidebar_requested = True
 
@@ -865,7 +910,7 @@ def try_unlock_record(record, entered_pin):
         return True
 
     st.session_state.pin_keypad_value = ""
-    st.session_state.pin_keypad_error = "PIN 錯誤，請再試一次。"
+    st.session_state.pin_keypad_error = t("PIN 錯誤，請再試一次。")
     return False
 
 
@@ -889,14 +934,14 @@ def ignore_comparison_keyboard_action():
 
 
 @st.dialog(
-    "輸入紀錄 PIN",
+    t("輸入紀錄 PIN"),
     width="small",
     icon="🔒",
     on_dismiss=close_pin_prompt
 )
 def show_pin_keypad(record):
     st.caption(record["title"])
-    st.caption("可點擊下方鍵盤，或直接使用電腦數字鍵輸入。")
+    st.caption(t("可點擊下方鍵盤，或直接使用電腦數字鍵輸入。"))
 
     pin_protection = record["result"].get("pin_protection")
     expected_pin_length = (
@@ -905,12 +950,13 @@ def show_pin_keypad(record):
         else None
     )
     if st.session_state.pin_keypad_error:
-        st.error(st.session_state.pin_keypad_error)
+        st.error(t(st.session_state.pin_keypad_error))
 
     keyboard_result = pin_keyboard_listener(
         data={
             "currentPin": st.session_state.pin_keypad_value,
-            "expectedLength": expected_pin_length
+            "expectedLength": expected_pin_length,
+            "language": language()
         },
         key=f"pin_keyboard_{record['id']}",
         on_action_change=ignore_pin_keyboard_action,
@@ -935,7 +981,7 @@ def show_pin_keypad(record):
                     st.session_state.pin_keypad_value = keyboard_pin
                 else:
                     st.session_state.pin_keypad_error = (
-                        "PIN 只能輸入數字。"
+                        t("PIN 只能輸入數字。")
                     )
                     st.rerun(scope="fragment")
                 if confirm_keypad_pin(record):
@@ -953,29 +999,35 @@ def apply_result_edits(ranking, edited_data):
         edited_rows = list(edited_data)
 
     if len(edited_rows) != len(ranking):
-        return False, "表格資料不完整，請重新整理後再試。"
+        return False, t("表格資料不完整，請重新整理後再試。")
 
     rename_map = {}
     edited_coordinates = {}
     new_names = []
 
     for old_name, row in zip(ranking, edited_rows):
-        new_name = str(row.get("名字", "")).strip()
+        new_name = str(row.get(t("名字"), "")).strip()
 
         if not new_name:
-            return False, "名字不能是空白。"
+            return False, t("名字不能是空白。")
 
         if new_name in new_names:
-            return False, f"名字「{new_name}」重複了。"
+            return False, tf("名字「{name}」重複了。", name=new_name)
 
         try:
-            x = float(row["X 座標"])
-            y = float(row["Y 座標"])
+            x = float(row[t("X 座標")])
+            y = float(row[t("Y 座標")])
         except (KeyError, TypeError, ValueError):
-            return False, f"{new_name} 的座標必須是數字。"
+            return False, tf(
+                "{name} 的座標必須是數字。",
+                name=new_name
+            )
 
         if not math.isfinite(x) or not math.isfinite(y):
-            return False, f"{new_name} 的座標必須是有效數字。"
+            return False, tf(
+                "{name} 的座標必須是有效數字。",
+                name=new_name
+            )
 
         x = max(-100, min(100, round(x)))
         y = max(-100, min(100, round(y)))
@@ -1032,7 +1084,7 @@ def apply_result_edits(ranking, edited_data):
 
     st.session_state.answer_history = []
     st.session_state.editor_version += 1
-    return True, "名字與座標已更新並保存。"
+    return True, t("名字與座標已更新並保存。")
 
 
 def apply_dragged_point():
@@ -1080,12 +1132,16 @@ def apply_dragged_point():
 
     if len(applied_points) == 1:
         name, x, y = applied_points[0]
-        st.session_state.drag_message = (
-            f"{name} 的座標已更新為 ({x}, {y})"
+        st.session_state.drag_message = tf(
+            "{name} 的座標已更新為 ({x}, {y})",
+            name=name,
+            x=x,
+            y=y
         )
     else:
-        st.session_state.drag_message = (
-            f"已更新並保存 {len(applied_points)} 個人物的座標"
+        st.session_state.drag_message = tf(
+            "已更新並保存 {count} 個人物的座標",
+            count=len(applied_points)
         )
     st.session_state.editor_version += 1
 
@@ -1132,7 +1188,7 @@ def apply_saved_annotations():
         st.session_state.x_coordinates,
         st.session_state.y_coordinates
     )
-    st.session_state.annotation_message = "備註已保存。"
+    st.session_state.annotation_message = t("備註已保存。")
 
 
 def make_figure():
@@ -1141,7 +1197,7 @@ def make_figure():
     figure, axis = plt.subplots(figsize=(8, 8))
     figure.patch.set_facecolor("white")
     axis.set_facecolor("white")
-    quadrants = normalized_quadrant_settings(
+    quadrants = localized_quadrant_settings(
         st.session_state.quadrant_settings
     )
     quadrant_areas = {
@@ -1198,7 +1254,9 @@ def make_figure():
 
     axis.set_xlim(-110, 110)
     axis.set_ylim(-110, 110)
-    settings = st.session_state.display_settings
+    settings = localized_display_settings(
+        st.session_state.display_settings
+    )
     axis.set_xlabel(
         settings["x_axis_title"],
         fontproperties=CHINESE_FONT,
@@ -1227,20 +1285,28 @@ if (
     and not user_is_logged_in()
     and not guest_mode_enabled()
 ):
-    st.title("🗺️ 人際關係座標圖")
-    st.write("登入可保存並載入自己的結果；也可以不登入單次使用。")
+    _, login_language_column = st.columns([0.78, 0.22])
+    with login_language_column:
+        st.button(
+            "中文" if language() == "en" else "English",
+            key="login_language_toggle",
+            width="stretch",
+            on_click=toggle_language
+        )
+    st.title(t("🗺️ 人際關係座標圖"))
+    st.write(t("登入可保存並載入自己的結果；也可以不登入單次使用。"))
     st.button(
-        "使用 Google 登入",
+        t("使用 Google 登入"),
         type="primary",
         width="stretch",
         on_click=st.login
     )
     st.button(
-        "以訪客身分使用",
+        t("以訪客身分使用"),
         width="stretch",
         on_click=start_guest_mode
     )
-    st.caption("訪客結果不會儲存，離開後無法載入。")
+    st.caption(t("訪客結果不會儲存，離開後無法載入。"))
     st.stop()
 
 
@@ -1249,7 +1315,7 @@ initialize_state()
 try:
     stored_results = load_current_results()
 except Exception as error:
-    st.error("目前無法連接私人資料庫，請稍後再試。")
+    st.error(t("目前無法連接私人資料庫，請稍後再試。"))
     st.exception(error)
     st.stop()
 
@@ -1280,53 +1346,65 @@ selected_record = get_record(
 if not st.session_state.display_settings_loaded:
     st.session_state.display_settings_loaded = True
 
-title_column, settings_column = st.columns(
-    [0.88, 0.12],
+title_column, language_column, settings_column = st.columns(
+    [0.68, 0.20, 0.12],
     vertical_alignment="center"
 )
 
+visible_display_settings = localized_display_settings(
+    st.session_state.display_settings
+)
+
 with title_column:
-    st.title(f"🗺️ {st.session_state.display_settings['app_title']}")
+    st.title(f"🗺️ {visible_display_settings['app_title']}")
+
+with language_column:
+    st.button(
+        "中文" if language() == "en" else "English",
+        key="language_toggle",
+        width="stretch",
+        on_click=toggle_language
+    )
 
 with settings_column:
-    with st.popover("⚙️", help="自訂標題與問題文字"):
-        st.markdown("#### 自訂文字")
-        current_settings = st.session_state.display_settings
+    with st.popover("⚙️", help=t("自訂標題與問題文字")):
+        st.markdown(t("#### 自訂文字"))
+        current_settings = visible_display_settings
 
         with st.form("display_settings_form"):
             custom_app_title = st.text_input(
-                "畫面標題",
+                t("畫面標題"),
                 value=current_settings["app_title"],
                 max_chars=80
             )
             custom_familiarity_question = st.text_input(
-                "第一組選擇題",
+                t("第一組選擇題"),
                 value=current_settings["familiarity_question"],
                 max_chars=80
             )
             custom_x_axis_title = st.text_input(
-                "X 軸標題",
+                t("X 軸標題"),
                 value=current_settings["x_axis_title"],
                 max_chars=80
             )
             custom_likability_question = st.text_input(
-                "第二組選擇題",
+                t("第二組選擇題"),
                 value=current_settings["likability_question"],
                 max_chars=80
             )
             custom_y_axis_title = st.text_input(
-                "Y 軸標題",
+                t("Y 軸標題"),
                 value=current_settings["y_axis_title"],
                 max_chars=80
             )
 
             save_custom_text = st.form_submit_button(
-                "套用文字",
+                t("套用文字"),
                 type="primary",
                 width="stretch"
             )
             restore_default_text = st.form_submit_button(
-                "恢復預設",
+                t("恢復預設"),
                 width="stretch"
             )
 
@@ -1340,7 +1418,7 @@ with settings_column:
             }
 
             if any(not value.strip() for value in new_settings.values()):
-                st.error("文字欄位不能留白。")
+                st.error(t("文字欄位不能留白。"))
             else:
                 st.session_state.display_settings = (
                     normalized_display_settings(new_settings)
@@ -1369,24 +1447,24 @@ with settings_column:
                 )
             st.rerun()
 
-st.caption("用兩兩比較，把朋友放進熟悉度與好感度座標。")
+st.caption(t("用兩兩比較，把朋友放進熟悉度與好感度座標。"))
 
 with st.sidebar:
-    st.subheader("選單")
+    st.subheader(t("選單"))
 
     if guest_mode_enabled():
-        st.caption("訪客模式：結果不會儲存")
+        st.caption(t("訪客模式：結果不會儲存"))
     elif cloud_mode_enabled():
         display_name = st.user.get("name") or st.user.get("email")
         if display_name:
-            st.caption(f"已登入：{display_name}")
+            st.caption(tf("已登入：{name}", name=display_name))
 
     if saved_records:
         record_by_id = {
             record["id"]: record for record in saved_records
         }
         st.selectbox(
-            "已保存紀錄",
+            t("已保存紀錄"),
             options=saved_record_ids,
             format_func=lambda record_id: display_record_label(
                 record_by_id[record_id]
@@ -1402,7 +1480,7 @@ with st.sidebar:
         )
 
         if not st.session_state.pin_prompt_open:
-            if st.button("檢視選取紀錄", width="stretch"):
+            if st.button(t("檢視選取紀錄"), width="stretch"):
                 if pin_protection_is_disabled(
                     selected_record["result"].get("pin_protection")
                 ):
@@ -1415,23 +1493,23 @@ with st.sidebar:
             pin_protection = selected_results.get("pin_protection")
 
             if not pin_protection_is_enabled(pin_protection):
-                st.info("是否要替這份紀錄加上 PIN 保護？")
+                st.info(t("是否要替這份紀錄加上 PIN 保護？"))
 
                 with st.form("choose_record_pin_form"):
                     pin_choice = st.radio(
-                        "載入方式",
-                        ["使用 PIN", "不使用 PIN"],
+                        t("載入方式"),
+                        [t("使用 PIN"), t("不使用 PIN")],
                         horizontal=True
                     )
 
-                    if pin_choice == "使用 PIN":
+                    if pin_choice == t("使用 PIN"):
                         new_pin = st.text_input(
-                            "建立 PIN",
+                            t("建立 PIN"),
                             type="password",
                             max_chars=8
                         )
                         confirm_pin = st.text_input(
-                            "再次輸入 PIN",
+                            t("再次輸入 PIN"),
                             type="password",
                             max_chars=8
                         )
@@ -1440,13 +1518,13 @@ with st.sidebar:
                         confirm_pin = ""
 
                     confirm_pin_choice = st.form_submit_button(
-                        "確認並載入",
+                        t("確認並載入"),
                         type="primary",
                         width="stretch"
                     )
 
                 if confirm_pin_choice:
-                    if pin_choice == "不使用 PIN":
+                    if pin_choice == t("不使用 PIN"):
                         pin_protection = disabled_pin_protection()
                         save_pin_protection(
                             selected_record,
@@ -1459,9 +1537,9 @@ with st.sidebar:
                         valid, pin_error = validate_pin(new_pin)
 
                         if not valid:
-                            st.error(pin_error)
+                            st.error(t(pin_error))
                         elif new_pin != confirm_pin:
-                            st.error("兩次輸入的 PIN 不一致。")
+                            st.error(t("兩次輸入的 PIN 不一致。"))
                         else:
                             pin_protection = create_pin_protection(new_pin)
                             save_pin_protection(
@@ -1472,17 +1550,17 @@ with st.sidebar:
                             close_pin_prompt()
                             st.rerun()
             else:
-                st.caption("請在彈出的數字鍵盤輸入 PIN。")
+                st.caption(t("請在彈出的數字鍵盤輸入 PIN。"))
 
             if st.button(
-                "取消",
+                t("取消"),
                 key="cancel_pin_prompt",
                 width="stretch"
             ):
                 close_pin_prompt()
                 st.rerun()
 
-    if st.button("建立新紀錄", width="stretch"):
+    if st.button(t("建立新紀錄"), width="stretch"):
         reset_app()
         st.rerun()
 
@@ -1491,20 +1569,20 @@ with st.sidebar:
         and not guest_mode_enabled()
         and not st.session_state.pin_prompt_open
     ):
-        with st.expander("管理選取紀錄"):
+        with st.expander(t("管理選取紀錄")):
             st.caption(display_record_label(selected_record))
 
             with st.form(
                 f"rename_record_form_{selected_record['id']}"
             ):
                 renamed_record_title = st.text_input(
-                    "紀錄名稱",
+                    t("紀錄名稱"),
                     value=selected_record["title"],
                     max_chars=80,
                     key=f"rename_record_title_{selected_record['id']}"
                 )
                 rename_record = st.form_submit_button(
-                    "更改紀錄名稱",
+                    t("更改紀錄名稱"),
                     type="primary",
                     width="stretch"
                 )
@@ -1516,7 +1594,7 @@ with st.sidebar:
                 ):
                     st.rerun()
                 else:
-                    st.error("紀錄名稱不能留白。")
+                    st.error(t("紀錄名稱不能留白。"))
 
             st.divider()
             selected_pin_protection = selected_record["result"].get(
@@ -1528,12 +1606,12 @@ with st.sidebar:
             )
 
             if pin_protection_is_enabled(selected_pin_protection):
-                st.markdown("**🔒 PIN 保護已啟用**")
+                st.markdown(t("**🔒 PIN 保護已啟用**"))
             else:
-                st.markdown("**PIN 保護未啟用**")
+                st.markdown(t("**PIN 保護未啟用**"))
 
             if st.button(
-                "收起 PIN 設定" if pin_settings_open else "調整 PIN",
+                t("收起 PIN 設定") if pin_settings_open else t("調整 PIN"),
                 key=f"toggle_pin_settings_{selected_record['id']}",
                 width="stretch"
             ):
@@ -1548,19 +1626,19 @@ with st.sidebar:
                         f"change_record_pin_form_{selected_record['id']}"
                     ):
                         current_pin_for_change = st.text_input(
-                            "目前 PIN",
+                            t("目前 PIN"),
                             type="password",
                             max_chars=8,
                             key=f"current_pin_change_{selected_record['id']}"
                         )
                         changed_pin = st.text_input(
-                            "新 PIN",
+                            t("新 PIN"),
                             type="password",
                             max_chars=8,
                             key=f"changed_pin_{selected_record['id']}"
                         )
                         changed_pin_confirm = st.text_input(
-                            "再次輸入新 PIN",
+                            t("再次輸入新 PIN"),
                             type="password",
                             max_chars=8,
                             key=(
@@ -1569,7 +1647,7 @@ with st.sidebar:
                             )
                         )
                         change_pin = st.form_submit_button(
-                            "更改 PIN",
+                            t("更改 PIN"),
                             type="primary",
                             width="stretch"
                         )
@@ -1581,11 +1659,11 @@ with st.sidebar:
                             current_pin_for_change,
                             selected_pin_protection
                         ):
-                            st.error("目前 PIN 錯誤。")
+                            st.error(t("目前 PIN 錯誤。"))
                         elif not valid:
-                            st.error(pin_error)
+                            st.error(t(pin_error))
                         elif changed_pin != changed_pin_confirm:
-                            st.error("兩次輸入的新 PIN 不一致。")
+                            st.error(t("兩次輸入的新 PIN 不一致。"))
                         else:
                             save_pin_protection(
                                 selected_record,
@@ -1598,7 +1676,7 @@ with st.sidebar:
                         f"disable_record_pin_form_{selected_record['id']}"
                     ):
                         current_pin_for_disable = st.text_input(
-                            "目前 PIN（關閉保護）",
+                            t("目前 PIN（關閉保護）"),
                             type="password",
                             max_chars=8,
                             key=(
@@ -1607,14 +1685,14 @@ with st.sidebar:
                             )
                         )
                         confirm_disable_pin = st.checkbox(
-                            "我確定要關閉 PIN 保護",
+                            t("我確定要關閉 PIN 保護"),
                             key=(
                                 "confirm_disable_pin_"
                                 f"{selected_record['id']}"
                             )
                         )
                         disable_pin = st.form_submit_button(
-                            "關閉 PIN 保護",
+                            t("關閉 PIN 保護"),
                             disabled=not confirm_disable_pin,
                             width="stretch"
                         )
@@ -1631,19 +1709,19 @@ with st.sidebar:
                             st.session_state.pin_settings_record_id = None
                             st.rerun()
                         else:
-                            st.error("目前 PIN 錯誤，無法關閉保護。")
+                            st.error(t("目前 PIN 錯誤，無法關閉保護。"))
                 else:
                     with st.form(
                         f"enable_record_pin_form_{selected_record['id']}"
                     ):
                         settings_pin = st.text_input(
-                            "建立 PIN",
+                            t("建立 PIN"),
                             type="password",
                             max_chars=8,
                             key=f"enable_pin_{selected_record['id']}"
                         )
                         settings_pin_confirm = st.text_input(
-                            "再次輸入 PIN",
+                            t("再次輸入 PIN"),
                             type="password",
                             max_chars=8,
                             key=(
@@ -1652,7 +1730,7 @@ with st.sidebar:
                             )
                         )
                         enable_pin = st.form_submit_button(
-                            "啟用 PIN 保護",
+                            t("啟用 PIN 保護"),
                             type="primary",
                             width="stretch"
                         )
@@ -1661,9 +1739,9 @@ with st.sidebar:
                         valid, pin_error = validate_pin(settings_pin)
 
                         if not valid:
-                            st.error(pin_error)
+                            st.error(t(pin_error))
                         elif settings_pin != settings_pin_confirm:
-                            st.error("兩次輸入的 PIN 不一致。")
+                            st.error(t("兩次輸入的 PIN 不一致。"))
                         else:
                             save_pin_protection(
                                 selected_record,
@@ -1674,11 +1752,11 @@ with st.sidebar:
 
             st.divider()
             confirm_delete_record = st.checkbox(
-                "我確定要刪除這份紀錄"
+                t("我確定要刪除這份紀錄")
             )
 
             if st.button(
-                "刪除選取紀錄",
+                t("刪除選取紀錄"),
                 disabled=not confirm_delete_record,
                 width="stretch"
             ):
@@ -1689,20 +1767,20 @@ with st.sidebar:
     if guest_mode_enabled():
         st.divider()
         st.button(
-            "結束訪客模式",
+            t("結束訪客模式"),
             width="stretch",
             on_click=exit_guest_mode
         )
     elif cloud_mode_enabled():
         st.divider()
 
-        with st.expander("帳號與資料"):
+        with st.expander(t("帳號與資料")):
             confirm_delete = st.checkbox(
-                "我確定要刪除自己的雲端結果"
+                t("我確定要刪除自己的雲端結果")
             )
 
             if st.button(
-                "刪除我的雲端結果",
+                t("刪除我的雲端結果"),
                 width="stretch",
                 disabled=not confirm_delete
             ):
@@ -1711,7 +1789,7 @@ with st.sidebar:
                 st.rerun()
 
         st.button(
-            "登出",
+            t("登出"),
             width="stretch",
             on_click=st.logout
         )
@@ -1745,23 +1823,23 @@ if st.session_state.pin_prompt_open:
 
 
 if st.session_state.stage == "names":
-    st.subheader("1. 輸入朋友名單")
+    st.subheader(t("1. 輸入朋友名單"))
     record_title_input = st.text_input(
-        "這份紀錄名稱（選填）",
+        t("這份紀錄名稱（選填）"),
         max_chars=80,
-        placeholder="例如：大學朋友"
+        placeholder=t("例如：大學朋友")
     )
     raw_names = st.text_area(
-        "一行一個名字，也可以用逗號分隔",
+        t("一行一個名字，也可以用逗號分隔"),
         height=180,
         placeholder="Amy\nKevin\nLeo"
     )
 
-    if st.button("開始比較", type="primary", width="stretch"):
+    if st.button(t("開始比較"), type="primary", width="stretch"):
         names = parse_names(raw_names)
 
         if len(names) < 2:
-            st.error("至少需要兩個不同的名字。")
+            st.error(t("至少需要兩個不同的名字。"))
         else:
             start_comparison(names, record_title_input)
             st.rerun()
@@ -1777,27 +1855,23 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 
     if st.session_state.stage == "familiarity":
         if is_incremental:
-            title = "新增人物：熟悉度比較"
+            title = t("新增人物：熟悉度比較")
         else:
-            title = "2. 熟悉度比較"
+            title = t("2. 熟悉度比較")
 
-        question = st.session_state.display_settings[
-            "familiarity_question"
-        ]
+        question = visible_display_settings["familiarity_question"]
     else:
         if is_incremental:
-            title = "新增人物：好感度比較"
+            title = t("新增人物：好感度比較")
         else:
-            title = "3. 好感度比較"
+            title = t("3. 好感度比較")
 
-        question = st.session_state.display_settings[
-            "likability_question"
-        ]
+        question = visible_display_settings["likability_question"]
 
     st.subheader(title)
 
     st.button(
-        "← 回上一題",
+        t("← 回上一題"),
         key="undo_comparison_answer",
         disabled=not st.session_state.answer_history,
         on_click=undo_last_answer
@@ -1805,7 +1879,7 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 
     if is_incremental:
         st.info(
-            "只會比較包含新人物的組合，舊人物彼此不用重選。"
+            t("只會比較包含新人物的組合，舊人物彼此不用重選。")
         )
 
     answered = st.session_state.stage_answer_count
@@ -1815,12 +1889,17 @@ elif st.session_state.stage in ["familiarity", "likability"]:
     )
     st.progress(min((answered + 1) / estimated_max, 1.0))
     st.caption(
-        f"智慧比較 · 已回答 {answered} 題 · "
-        f"此階段最多約 {estimated_max} 題"
+        tf(
+            "智慧比較 · 已回答 {answered} 題 · "
+            "此階段最多約 {maximum} 題",
+            answered=answered,
+            maximum=estimated_max
+        )
     )
     st.markdown(f"### {question}")
 
     keyboard_result = comparison_keyboard_listener(
+        data={"language": language()},
         key=f"comparison_keyboard_{st.session_state.stage}_{question_index}",
         on_action_change=ignore_comparison_keyboard_action,
         width="stretch",
@@ -1866,7 +1945,7 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 
     with middle:
         st.button(
-            "一樣",
+            t("一樣"),
             key=f"{st.session_state.stage}-{question_index}-equal",
             width="stretch",
             on_click=record_answer,
@@ -1893,21 +1972,21 @@ elif st.session_state.stage in ["familiarity", "likability"]:
 
 
 elif st.session_state.stage == "results":
-    if st.button("← 回到主頁", width="stretch"):
+    if st.button(t("← 回到主頁"), width="stretch"):
         reset_app()
         st.rerun()
 
-    st.subheader("4. 最終結果")
+    st.subheader(t("4. 最終結果"))
 
     if guest_mode_enabled():
         st.info(
-            "目前是訪客模式：可繼續查看與編輯本次結果，"
-            "但離開後無法載入。"
+            t("目前是訪客模式：可繼續查看與編輯本次結果，"
+            "但離開後無法載入。")
         )
 
     if st.session_state.answer_history:
         st.button(
-            "← 回上一題",
+            t("← 回上一題"),
             key="undo_result_answer",
             on_click=undo_last_answer
         )
@@ -1922,16 +2001,16 @@ elif st.session_state.stage == "results":
         st.toast(edit_message, icon="✅")
 
     with st.container(border=True):
-        st.markdown("### ➕ 新增人物")
+        st.markdown(t("### ➕ 新增人物"))
         raw_new_names = st.text_area(
-            "輸入新名字，一行一個或用逗號分隔",
+            t("輸入新名字，一行一個或用逗號分隔"),
             key="new_names_input",
             height=100,
-            placeholder="新朋友"
+            placeholder=t("新朋友")
         )
 
         if st.button(
-            "加入並比較新人物",
+            t("加入並比較新人物"),
             width="stretch"
         ):
             entered_names = parse_names(raw_new_names)
@@ -1942,16 +2021,16 @@ elif st.session_state.stage == "results":
             ]
 
             if not entered_names:
-                st.error("請至少輸入一個名字。")
+                st.error(t("請至少輸入一個名字。"))
             elif not new_names:
-                st.error("輸入的名字都已經在目前名單中。")
+                st.error(t("輸入的名字都已經在目前名單中。"))
             else:
                 start_incremental_comparison(new_names)
                 st.rerun()
 
     if not guest_mode_enabled():
         if st.button(
-            "儲存目前結果",
+            t("儲存目前結果"),
             type="primary",
             width="stretch"
         ):
@@ -1962,7 +2041,7 @@ elif st.session_state.stage == "results":
                 st.session_state.x_coordinates,
                 st.session_state.y_coordinates
             )
-            st.success("目前畫面中的結果已保存。")
+            st.success(t("目前畫面中的結果已保存。"))
 
     ranking = sorted(
         st.session_state.names,
@@ -1975,17 +2054,17 @@ elif st.session_state.stage == "results":
     for name in ranking:
         rows.append(
             {
-                "名字": name,
-                "熟悉度分數": st.session_state.familiarity_scores[name],
-                "好感度分數": st.session_state.likability_scores[name],
-                "X 座標": st.session_state.x_coordinates[name],
-                "Y 座標": st.session_state.y_coordinates[name]
+                t("名字"): name,
+                t("熟悉度分數"): st.session_state.familiarity_scores[name],
+                t("好感度分數"): st.session_state.likability_scores[name],
+                t("X 座標"): st.session_state.x_coordinates[name],
+                t("Y 座標"): st.session_state.y_coordinates[name]
             }
         )
 
-    st.markdown("### ✏️ 編輯名字與座標")
+    st.markdown(t("### ✏️ 編輯名字與座標"))
     st.caption(
-        "名字與 X/Y 可以修改；熟悉度與好感度原始分數為唯讀。"
+        t("名字與 X/Y 可以修改；熟悉度與好感度原始分數為唯讀。")
     )
 
     with st.form("edit_results_form"):
@@ -1998,29 +2077,29 @@ elif st.session_state.stage == "results":
             width="stretch",
             hide_index=True,
             num_rows="fixed",
-            disabled=["熟悉度分數", "好感度分數"],
+            disabled=[t("熟悉度分數"), t("好感度分數")],
             column_config={
-                "名字": st.column_config.TextColumn(
-                    "名字",
+                t("名字"): st.column_config.TextColumn(
+                    t("名字"),
                     required=True
                 ),
-                "熟悉度分數": st.column_config.NumberColumn(
-                    "熟悉度分數",
+                t("熟悉度分數"): st.column_config.NumberColumn(
+                    t("熟悉度分數"),
                     disabled=True
                 ),
-                "好感度分數": st.column_config.NumberColumn(
-                    "好感度分數",
+                t("好感度分數"): st.column_config.NumberColumn(
+                    t("好感度分數"),
                     disabled=True
                 ),
-                "X 座標": st.column_config.NumberColumn(
-                    "X 座標",
+                t("X 座標"): st.column_config.NumberColumn(
+                    t("X 座標"),
                     min_value=-100,
                     max_value=100,
                     step=1,
                     required=True
                 ),
-                "Y 座標": st.column_config.NumberColumn(
-                    "Y 座標",
+                t("Y 座標"): st.column_config.NumberColumn(
+                    t("Y 座標"),
                     min_value=-100,
                     max_value=100,
                     step=1,
@@ -2030,7 +2109,7 @@ elif st.session_state.stage == "results":
         )
 
         apply_edits = st.form_submit_button(
-            "套用名字與座標修改",
+            t("套用名字與座標修改"),
             type="primary",
             width="stretch"
         )
@@ -2047,11 +2126,11 @@ elif st.session_state.stage == "results":
         else:
             st.error(edit_feedback)
 
-    st.markdown("### 🖐️ 拖曳調整座標")
+    st.markdown(t("### 🖐️ 拖曳調整座標"))
     st.caption(
-        "拖動圓點即可微調 X/Y 座標；停止拖曳 30 秒後自動保存，"
+        t("拖動圓點即可微調 X/Y 座標；停止拖曳 30 秒後自動保存，"
         "也可以按「儲存座標」立即保存。"
-        "原始熟悉度與好感度分數不會改變。"
+        "原始熟悉度與好感度分數不會改變。")
     )
 
     map_points = [
@@ -2065,11 +2144,12 @@ elif st.session_state.stage == "results":
 
     draggable_relationship_map(
         data={
-            "title": st.session_state.display_settings["app_title"],
+            "language": language(),
+            "title": visible_display_settings["app_title"],
             "points": map_points,
             "axisTitles": {
-                "x": st.session_state.display_settings["x_axis_title"],
-                "y": st.session_state.display_settings["y_axis_title"]
+                "x": visible_display_settings["x_axis_title"],
+                "y": visible_display_settings["y_axis_title"]
             }
         },
         key="relationship_map_component",
@@ -2078,20 +2158,20 @@ elif st.session_state.stage == "results":
         height=660
     )
 
-    with st.expander("查看靜態圖"):
-        st.markdown("#### 設定四個象限")
-        st.caption("輸入各區名稱並選擇背景色，設定會顯示在下方靜態圖並隨結果保存。")
-        quadrant_settings = normalized_quadrant_settings(
+    with st.expander(t("查看靜態圖")):
+        st.markdown(t("#### 設定四個象限"))
+        st.caption(t("輸入各區名稱並選擇背景色，設定會顯示在下方靜態圖並隨結果保存。"))
+        quadrant_settings = localized_quadrant_settings(
             st.session_state.quadrant_settings
         )
 
         with st.form("quadrant_settings_form"):
             quadrant_inputs = {}
             quadrant_labels = (
-                ("top_left", "左上象限"),
-                ("top_right", "右上象限"),
-                ("bottom_left", "左下象限"),
-                ("bottom_right", "右下象限")
+                ("top_left", t("左上象限")),
+                ("top_right", t("右上象限")),
+                ("bottom_left", t("左下象限")),
+                ("bottom_right", t("右下象限"))
             )
 
             for row in (quadrant_labels[:2], quadrant_labels[2:]):
@@ -2099,13 +2179,13 @@ elif st.session_state.stage == "results":
                 for column, (quadrant, label) in zip(columns, row):
                     with column:
                         name = st.text_input(
-                            f"{label}名稱",
+                            f"{label}{t('名稱')}",
                             value=quadrant_settings[quadrant]["name"],
                             max_chars=30,
                             key=f"{quadrant}_name"
                         )
                         color = st.color_picker(
-                            f"{label}色塊",
+                            f"{label}{t('色塊')}",
                             value=quadrant_settings[quadrant]["color"],
                             key=f"{quadrant}_color"
                         )
@@ -2115,7 +2195,7 @@ elif st.session_state.stage == "results":
                         }
 
             apply_quadrants = st.form_submit_button(
-                "套用象限設定",
+                t("套用象限設定"),
                 type="primary",
                 width="stretch"
             )
@@ -2125,7 +2205,7 @@ elif st.session_state.stage == "results":
                 not setting["name"].strip()
                 for setting in quadrant_inputs.values()
             ):
-                st.error("四個象限的名稱都不能留白。")
+                st.error(t("四個象限的名稱都不能留白。"))
             else:
                 st.session_state.quadrant_settings = (
                     normalized_quadrant_settings(quadrant_inputs)
@@ -2137,35 +2217,35 @@ elif st.session_state.stage == "results":
                     st.session_state.x_coordinates,
                     st.session_state.y_coordinates
                 )
-                st.toast("象限名稱與色塊已套用並保存。", icon="✅")
+                st.toast(t("象限名稱與色塊已套用並保存。"), icon="✅")
                 st.rerun()
 
         figure = make_figure()
         st.pyplot(figure, width="stretch")
         plt.close(figure)
 
-    st.markdown("### 📝 備註與定義")
+    st.markdown(t("### 📝 備註與定義"))
     st.caption(
-        "按 ＋ 新增；「自訂」會在同一格切換成文字輸入。"
-        "將滑鼠移到資料列上即可看到左側的 － 刪除按鈕。"
+        t("按 ＋ 新增；「自訂」會在同一格切換成文字輸入。"
+        "將滑鼠移到資料列上即可看到左側的 － 刪除按鈕。")
     )
     annotation_message = st.session_state.pop("annotation_message", None)
     if annotation_message:
         st.toast(annotation_message, icon="✅")
 
-    quadrant_settings = normalized_quadrant_settings(
+    quadrant_settings = localized_quadrant_settings(
         st.session_state.quadrant_settings
     )
-    note_options = [{"value": "custom", "label": "自訂"}]
+    note_options = [{"value": "custom", "label": t("自訂")}]
     note_options.extend(
         {
             "value": f"quadrant:{quadrant}",
-            "label": f"象限｜{setting['name']}"
+            "label": f"{t('象限｜')}{setting['name']}"
         }
         for quadrant, setting in quadrant_settings.items()
     )
     note_options.extend(
-        {"value": f"friend:{name}", "label": f"朋友｜{name}"}
+        {"value": f"friend:{name}", "label": f"{t('朋友｜')}{name}"}
         for name in st.session_state.names
     )
     note_rows = []
@@ -2193,7 +2273,11 @@ elif st.session_state.stage == "results":
             )
 
     notes_editor(
-        data={"options": note_options, "rows": note_rows},
+        data={
+            "language": language(),
+            "options": note_options,
+            "rows": note_rows
+        },
         key="notes_editor_component",
         on_saved_change=apply_saved_annotations,
         width="stretch",
